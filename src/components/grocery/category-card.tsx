@@ -17,44 +17,47 @@ interface CategoryCardProps {
   onClick?: () => void;
 }
 
+function getCategoryEmoji(id: string) {
+  switch (id.toLowerCase()) {
+    case "dispensa":
+      return "🥫";
+    case "latticini & salumi":
+      return "🧀";
+    case "panetteria":
+      return "🥖";
+    case "enoteca":
+      return "🍷";
+    case "frutta & verdura":
+      return "🥦";
+    case "casa & persona":
+      return "🧼";
+    default:
+      return "🛒";
+  }
+}
+
 export function CategoryCard({ category, isActive = false, onClick }: CategoryCardProps) {
   return (
     <div
       onClick={onClick}
       className={cn(
-        "group relative aspect-[4/3] rounded-xl overflow-hidden cursor-pointer select-none border border-border/80 shadow-soft transition-all duration-300",
+        "group relative flex flex-col items-center justify-center p-6 bg-slate-50 hover:bg-slate-100/80 rounded-md cursor-pointer select-none border border-slate-200/80 shadow-sm transition-all duration-200",
         isActive
-          ? "border-primary ring-2 ring-primary/20 ring-offset-1"
-          : "hover:border-border hover:shadow-premium hover:-translate-y-0.5"
+          ? "border-green-600 ring-2 ring-green-600/10"
+          : "hover:border-slate-300 hover:shadow-md"
       )}
     >
-      {/* Category Image */}
-      <Image
-        src={category.imageUrl}
-        alt={category.name}
-        fill
-        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-        className="object-cover group-hover:scale-[1.04] transition-transform duration-500 ease-expo-out"
-        onError={(e) => {
-          e.currentTarget.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
-          e.currentTarget.srcset = "";
-        }}
-      />
-
-      {/* Dark overlay for text contrast */}
-      <div className="absolute inset-0 bg-gradient-to-t from-espresso/80 via-espresso/20 to-transparent opacity-80 group-hover:opacity-90 transition-opacity duration-300" />
-
-      {/* Content Overlay */}
-      <div className="absolute inset-0 flex flex-col justify-end p-4 text-white">
-        <h4 className="font-serif text-lg md:text-xl font-medium tracking-tight leading-none mb-0.5">
-          {category.name}
-        </h4>
-        {category.itemCount !== undefined && (
-          <span className="text-[11px] font-semibold text-white/80 uppercase tracking-widest">
-            {category.itemCount} Prodotti
-          </span>
-        )}
+      <div className="text-3.5xl mb-2 select-none group-hover:scale-110 transition-transform duration-300">
+        {getCategoryEmoji(category.id)}
       </div>
+      <h4 className="font-sans text-xs font-bold text-slate-800 text-center tracking-tight leading-tight mb-1">
+        {category.name}
+      </h4>
+      {category.itemCount !== undefined && (
+        <span className="text-[10px] font-bold text-slate-450 uppercase tracking-wider">
+          {category.itemCount} Prodotti
+        </span>
+      )}
     </div>
   );
 }

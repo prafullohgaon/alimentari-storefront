@@ -5,7 +5,7 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { QuantitySelector } from "@/components/grocery/quantity-selector";
-import { ShoppingBag, Star, Leaf, Heart } from "lucide-react";
+import { Heart, Plus } from "lucide-react";
 
 export interface Product {
   id: string;
@@ -17,7 +17,7 @@ export interface Product {
   rating?: number;
   tags?: string[];
   isOrganic?: boolean;
-  originalPrice?: number; // for sales
+  originalPrice?: number;
 }
 
 import { useWishlistStore } from "@/store/wishlist";
@@ -27,6 +27,16 @@ interface ProductCardProps {
   quantityInCart: number;
   onQuantityChange: (id: string, qty: number) => void;
   onQuickView?: (product: Product) => void;
+}
+
+function getProductBrand(product: Product) {
+  if (product.name.toLowerCase().includes("pasta") || product.name.toLowerCase().includes("paccheri")) return "Pastificio Liguori";
+  if (product.name.toLowerCase().includes("olio")) return "Antico Frantoio";
+  if (product.name.toLowerCase().includes("parmigiano")) return "Consorzio Parmigiano";
+  if (product.name.toLowerCase().includes("mozzarella")) return "Caseificio Campano";
+  if (product.name.toLowerCase().includes("franciacorta") || product.name.toLowerCase().includes("vino")) return "Bellavista Enoteca";
+  if (product.name.toLowerCase().includes("prosciutto")) return "Salumificio Devodier";
+  return "Alimentari Selezione";
 }
 
 export function ProductCard({
@@ -40,20 +50,14 @@ export function ProductCard({
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
 
-  // Centralized Wishlist Store Integration
   const wishlistIds = useWishlistStore((state) => state.ids);
   const toggleWishlistAction = useWishlistStore((state) => state.toggleWishlist);
-  
+
   const [hasMounted, setHasMounted] = React.useState(false);
   const [imgSrc, setImgSrc] = React.useState(product.imageUrl);
 
-  React.useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
-  React.useEffect(() => {
-    setImgSrc(product.imageUrl);
-  }, [product.imageUrl]);
+  React.useEffect(() => { setHasMounted(true); }, []);
+  React.useEffect(() => { setImgSrc(product.imageUrl); }, [product.imageUrl]);
 
   const isWishlisted = wishlistIds.includes(product.id);
 
@@ -65,137 +69,108 @@ export function ProductCard({
   return (
     <div
       className={cn(
-        "group relative flex flex-col bg-card rounded-xl border border-border/80 overflow-hidden shadow-soft",
-        "hover:border-border hover:shadow-premium hover:-translate-y-0.5 transition-all duration-300"
+        "group relative flex flex-col bg-card rounded-md border border-border overflow-hidden",
+        "hover:border-primary/40 hover:shadow-sm transition-all duration-200"
       )}
     >
-      {/* Badges Overlay */}
-      <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 pointer-events-none">
+      {/* Sale badge — top-left */}
+      <div className="absolute top-1.5 left-1.5 z-10 flex flex-col gap-0.5 pointer-events-none">
         {product.isOrganic && (
-          <Badge variant="success" className="gap-1 bg-white/95 backdrop-blur-sm">
-            <Leaf className="w-3 h-3 text-success fill-success/10" />
-            Bio
+          <Badge className="bg-primary text-primary-foreground border-none text-[8px] font-bold py-0 px-1 rounded-sm leading-4">
+            BIO
           </Badge>
         )}
         {isSale && (
-          <Badge variant="accent" className="bg-accent/95 text-white">
+          <Badge className="bg-red-500 text-white border-none text-[8px] font-bold py-0 px-1 rounded-sm leading-4">
             -{discountPercent}%
           </Badge>
         )}
-        {product.tags?.map((tag) => (
-          <Badge
-            key={tag}
-            variant="outline"
-            className="bg-white/90 backdrop-blur-sm text-[10px] font-semibold border-border/60"
-          >
-            {tag}
-          </Badge>
-        ))}
       </div>
 
-      {/* Floating Wishlist Button — suppressed until after mount to avoid hydration mismatch */}
+      {/* Wishlist — top-right, small */}
       <button
         type="button"
         onClick={toggleWishlist}
-        className="absolute top-3 right-3 z-20 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm flex items-center justify-center border border-border/40 shadow-sm hover:scale-105 active:scale-95 transition-all duration-200"
+        className="absolute top-1.5 right-1.5 z-20 w-6 h-6 rounded-full bg-card/90 flex items-center justify-center border border-border shadow-sm hover:scale-105 active:scale-95 transition-all duration-200"
         aria-label="Aggiungi ai preferiti"
         suppressHydrationWarning
       >
         <Heart
           className={cn(
-            "w-4 h-4 transition-colors duration-200 stroke-[2.5]",
-            hasMounted && isWishlisted ? "text-accent fill-accent" : "text-[#C9623B]"
+            "w-3 h-3 transition-colors duration-200 stroke-[2.5]",
+            hasMounted && isWishlisted ? "text-red-500 fill-red-500" : "text-muted"
           )}
         />
       </button>
 
-      {/* Image Gallery Container (Gentle Editorial Zoom) */}
+      {/* Image — reduced to 3:4 aspect, slightly rectangular like Vico */}
       <div
         onClick={() => onQuickView?.(product)}
-        className="relative aspect-square w-full bg-[#FAF7F2] cursor-pointer overflow-hidden select-none"
+        className="relative w-full bg-secondary cursor-pointer overflow-hidden select-none"
+        style={{ aspectRatio: "1 / 1", maxHeight: "200px" }}
       >
-        {/* Primary Image */}
         <Image
           src={imgSrc}
           alt={product.name}
           fill
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 ease-expo-out group-hover:scale-[1.025]"
-          onError={() => {
-            setImgSrc("https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop");
-          }}
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 20vw, 16vw"
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+          onError={() => setImgSrc("https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop")}
           priority={product.id === "1" || product.id === "2"}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-espresso/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-        
-        {/* Real-world shipping tag */}
-        <div className="absolute bottom-2 left-2 z-10 select-none pointer-events-none">
-          <span className="bg-[#1C3B2B]/85 backdrop-blur-sm text-white text-[8px] font-bold py-0.5 px-2 rounded tracking-widest uppercase">
-            {product.category === "Latticini & Salumi" ? "Refrigerato" : "Standard"}
-          </span>
-        </div>
+        {/* Minimal shipping tag */}
+        <span className="absolute bottom-1 left-1 bg-foreground/70 text-background text-[7px] font-bold py-0.5 px-1 rounded tracking-wide uppercase">
+          {product.category === "Latticini & Salumi" ? "Refrigerato" : "Standard"}
+        </span>
       </div>
 
-      {/* Content Section */}
-      <div className="flex flex-col flex-grow p-4">
-        {/* Category & Rating Row */}
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <span className="text-[10px] md:text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-            {product.category}
-          </span>
-          {product.rating && (
-            <div className="flex items-center gap-0.5 text-warning select-none">
-              <Star className="w-3 h-3 fill-current" />
-              <span className="text-xs font-semibold text-foreground">
-                {product.rating.toFixed(1)}
-              </span>
-            </div>
-          )}
-        </div>
+      {/* Content — minimal padding, tight layout */}
+      <div className="flex flex-col p-1 bg-card select-none">
+        {/* Brand */}
+        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none mb-1 truncate">
+          {getProductBrand(product)}
+        </span>
 
-        {/* Product Title (Fixed Height for Alignment) */}
+        {/* Name */}
         <h3
           onClick={() => onQuickView?.(product)}
-          className="font-serif text-base md:text-lg font-medium text-foreground tracking-tight line-clamp-2 leading-snug cursor-pointer hover:text-primary transition-colors min-h-[2.5rem] md:min-h-[2.75rem]"
+          className="font-sans text-[14px] font-semibold text-foreground line-clamp-2 leading-tight cursor-pointer hover:text-primary transition-colors mb-0.5"
+          style={{ minHeight: "2rem" }}
         >
           {product.name}
         </h3>
 
-        {/* Price & Quantity Info (Fixed Height for Alignment) */}
-        <div className="flex flex-col min-h-[3rem] md:min-h-[3.25rem] justify-end pt-1 pb-3">
-          <span className="text-[11px] md:text-xs text-muted-foreground font-medium">
-            {product.unit}
-          </span>
-          <div className="flex items-baseline gap-2 mt-0.5">
-            <span className="font-semibold text-base md:text-lg text-foreground tracking-tight">
+        {/* Unit */}
+        <span className="text-[12px] text-muted font-medium leading-none mb-1">{product.unit}</span>
+
+        {/* Price row + add button on same row (Vico style) */}
+        <div className="flex items-center justify-between mt-1 gap-1">
+          <div className="flex items-baseline gap-1">
+            <span className="font-extrabold text-[16px] text-foreground leading-none">
               €{product.price.toFixed(2)}
             </span>
             {isSale && (
-              <span className="text-xs text-muted-foreground line-through decoration-muted font-medium">
+              <span className="text-[10px] text-muted line-through font-medium">
                 €{product.originalPrice!.toFixed(2)}
               </span>
             )}
           </div>
-        </div>
 
-        {/* Dynamic CTA Layer */}
-        <div className="mt-auto">
+          {/* Vico-style: small square add button when qty=0, compact selector when qty>0 */}
           {quantityInCart === 0 ? (
             <button
               onClick={() => onQuantityChange(product.id, 1)}
-              className={cn(
-                "w-full h-11 bg-primary text-primary-foreground hover:bg-primary/95 font-semibold text-sm rounded-lg flex items-center justify-center gap-2 select-none shadow-sm transition-all duration-200",
-                "active:scale-[0.98] active:bg-primary/90 btn-touch-active"
-              )}
+              className="w-8 h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center flex-shrink-0 active:scale-95 transition-all shadow-sm"
+              aria-label="Aggiungi al carrello"
             >
-              <ShoppingBag className="w-4 h-4 stroke-[2]" />
-              Aggiungi
+              <Plus className="w-4 h-4 stroke-[2.5]" />
             </button>
           ) : (
             <QuantitySelector
               value={quantityInCart}
               onChange={(qty) => onQuantityChange(product.id, qty)}
-              className="w-full"
+              className="h-8 w-full max-w-[96px]"
+              size="sm"
             />
           )}
         </div>

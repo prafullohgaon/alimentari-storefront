@@ -59,20 +59,20 @@ export function CartDrawer() {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "tween", duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed top-0 right-0 z-50 h-full w-full max-w-md bg-card shadow-elevation flex flex-col"
+            className="fixed top-0 right-0 z-50 h-full w-full max-w-md bg-white border-l border-border shadow-elevation flex flex-col"
           >
             {/* Drawer Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border select-none">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 select-none">
               <div className="flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-primary stroke-[2.5]" />
-                <h3 id="cart-title" className="font-serif text-xl font-bold tracking-tight">Carrello</h3>
-                <span className="bg-primary/10 text-primary text-xs font-bold px-2 py-0.5 rounded-full">
+                <h3 id="cart-title" className="font-sans text-lg font-extrabold text-slate-900 tracking-tight">Carrello</h3>
+                <span className="bg-secondary text-primary text-xs font-bold px-2 py-0.5 rounded-full border border-primary">
                   {items.length}
                 </span>
               </div>
               <button
                 onClick={onClose}
-                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-muted/15 active:scale-90 text-foreground transition-all"
+                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-secondary active:scale-90 text-primary transition-all"
                 aria-label="Chiudi carrello"
               >
                 <X className="w-5 h-5 stroke-[2]" />
@@ -81,10 +81,10 @@ export function CartDrawer() {
 
             {/* Shipping Goal Indicator */}
             {items.length > 0 && (
-              <div className="px-6 py-4 bg-secondary/30 border-b border-border select-none">
-                <div className="flex justify-between text-xs font-semibold text-foreground mb-1.5">
+              <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 select-none">
+                <div className="flex justify-between text-xs font-semibold text-slate-800 mb-1.5">
                   {isFreeShipping ? (
-                    <span className="text-success flex items-center gap-1">
+                    <span className="text-primary flex items-center gap-1">
                       🎉 Spedizione Gratuita Raggiunta!
                     </span>
                   ) : (
@@ -94,11 +94,10 @@ export function CartDrawer() {
                   )}
                   <span>€{subtotal.toFixed(2)} / €{FREE_SHIPPING_THRESHOLD.toFixed(2)}</span>
                 </div>
-                <div className="w-full h-2 bg-border/60 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                   <div
                     className={cn(
-                      "h-full rounded-full transition-all duration-500 ease-out",
-                      isFreeShipping ? "bg-success" : "bg-primary"
+                      "h-full rounded-full transition-all duration-500 ease-out bg-primary"
                     )}
                     style={{ width: `${progressPercent}%` }}
                   />
@@ -107,19 +106,22 @@ export function CartDrawer() {
             )}
 
             {/* Cart Items List */}
-            <div className="flex-1 overflow-y-auto px-6 py-4 divide-y divide-border">
+            <div className="flex-1 overflow-y-auto px-6 py-4 divide-y divide-slate-100">
               {items.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center py-12 select-none animate-fadeIn">
-                  <div className="w-16 h-16 rounded-full bg-secondary/40 flex items-center justify-center text-primary mb-4">
+                  <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-green-600 mb-4">
                     <ShoppingBag className="w-8 h-8 stroke-[1.5]" />
                   </div>
-                  <h4 className="font-serif text-lg font-semibold mb-1">Il tuo carrello è vuoto</h4>
-                  <p className="text-sm text-muted-foreground max-w-[240px] mb-6">
+                  <h4 className="font-sans text-base font-extrabold text-slate-900 mb-1">Il tuo carrello è vuoto</h4>
+                  <p className="text-xs text-slate-500 max-w-[240px] mb-6 font-semibold">
                     Aggiungi le nostre fresche specialità italiane per riempire la tua tavola.
                   </p>
-                  <Button variant="outline" size="sm" onClick={onClose}>
+                  <button
+                    onClick={onClose}
+                    className="h-10 px-6 border border-border hover:bg-secondary font-bold text-xs text-primary rounded-md shadow-sm transition-colors"
+                  >
                     Continua lo shopping
-                  </Button>
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-4 pt-1">
@@ -129,7 +131,7 @@ export function CartDrawer() {
                       className="flex gap-4 py-4 first:pt-0 last:pb-0 group"
                     >
                       {/* Product Thumbnail */}
-                      <div className="w-20 h-20 bg-muted/20 rounded-lg overflow-hidden border border-border flex-shrink-0 relative">
+                      <div className="w-20 h-20 bg-secondary rounded-md overflow-hidden border border-border flex-shrink-0 relative">
                         <Image
                           src={item.product.imageUrl}
                           alt={item.product.name}
@@ -147,14 +149,14 @@ export function CartDrawer() {
                       <div className="flex-grow flex flex-col">
                         <div className="flex justify-between items-start gap-2">
                           <div>
-                            <h4 className="font-serif font-medium text-base text-foreground leading-snug tracking-tight">
+                            <h4 className="font-sans font-bold text-sm text-foreground leading-snug tracking-tight">
                               {item.product.name}
                             </h4>
-                            <span className="text-xs text-muted-foreground font-medium block mt-0.5">
+                            <span className="text-[11px] text-muted font-semibold block mt-0.5">
                               {item.product.unit}
                             </span>
                           </div>
-                          <span className="font-semibold text-sm text-foreground whitespace-nowrap">
+                          <span className="font-bold text-sm text-foreground whitespace-nowrap">
                             €{(item.product.price * item.quantity).toFixed(2)}
                           </span>
                         </div>
@@ -169,7 +171,7 @@ export function CartDrawer() {
                           />
                           <button
                             onClick={() => onRemoveItem(item.product.id)}
-                            className="w-8 h-8 flex items-center justify-center rounded text-muted hover:text-error hover:bg-error/5 transition-all active:scale-95"
+                            className="w-8 h-8 flex items-center justify-center rounded text-slate-400 hover:text-red-500 hover:bg-red-55/10 transition-all active:scale-95"
                             aria-label="Rimuovi prodotto"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -186,27 +188,27 @@ export function CartDrawer() {
             {items.length > 0 && (
               <div className="border-t border-border px-6 py-6 bg-card shadow-lg select-none">
                 <div className="space-y-2 mb-6">
-                  <div className="flex justify-between text-sm text-muted-foreground">
+                  <div className="flex justify-between text-xs text-muted font-semibold">
                     <span>Imponibile</span>
                     <span>€{(subtotal * 0.9).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm text-muted-foreground">
+                  <div className="flex justify-between text-xs text-muted font-semibold">
                     <span>IVA (10% Grocery)</span>
                     <span>€{(subtotal * 0.1).toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-base font-bold text-foreground pt-1 border-t border-border/60">
+                  <div className="flex justify-between text-sm font-bold text-foreground pt-2 border-t border-border">
                     <span>Totale Spesa</span>
-                    <span className="text-xl tracking-tight">€{subtotal.toFixed(2)}</span>
+                    <span className="text-lg font-extrabold tracking-tight">€{subtotal.toFixed(2)}</span>
                   </div>
                 </div>
 
                 <CheckoutButton items={items} />
 
                 <div className="mt-3.5 space-y-2 text-center select-none">
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  <p className="text-[10px] text-muted leading-relaxed font-semibold">
                     ❄️ <strong>Catena del Freddo Garantita</strong>: i tuoi prodotti freschi viaggiano in box termici refrigerati per mantenere inalterata la qualità.
                   </p>
-                  <p className="text-[11px] text-muted-foreground/80 tracking-wide font-medium">
+                  <p className="text-[11px] text-muted/80 tracking-wide font-semibold">
                     IVA inclusa. Spedizione calcolata al checkout. SSL Secure Connection.
                   </p>
                 </div>
@@ -241,13 +243,13 @@ function CheckoutButton({ items }: { items: CartItem[] }) {
       onClick={handleCheckout}
       disabled={isRedirecting}
       className={cn(
-        "w-full h-14 bg-primary text-primary-foreground hover:bg-primary/95 font-semibold text-base rounded-lg flex items-center justify-center gap-2 select-none shadow-premium transition-all duration-200",
-        "active:scale-[0.99] active:bg-primary/90 btn-touch-active disabled:opacity-50 disabled:cursor-not-allowed"
-      )}
+          "w-full h-12 bg-primary hover:bg-primary/90 text-white font-bold text-sm rounded-md flex items-center justify-center gap-2 select-none shadow-sm transition-all duration-200",
+          "active:scale-[0.99] active:bg-primary/80 btn-touch-active disabled:opacity-50 disabled:cursor-not-allowed"
+        )}
     >
       {isRedirecting ? (
         <>
-          <span className="animate-spin rounded-full h-5 w-5 border-2 border-primary-foreground border-t-transparent" />
+          <span className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
           Reindirizzamento in corso...
         </>
       ) : (

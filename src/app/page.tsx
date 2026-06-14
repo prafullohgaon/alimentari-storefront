@@ -1,16 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Shield, Sparkles, Truck, Leaf, Gift, Mail, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Shield, Sparkles, Truck, Leaf, Mail, ChevronLeft, ChevronRight } from "lucide-react";
 import { PRODUCTS, CATEGORIES, Product } from "@/lib/data";
 import { getProductHandle } from "@/lib/shopify";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProductCard } from "@/components/grocery/product-card";
-import { CategoryCard } from "@/components/grocery/category-card";
 import { MobileBottomNav } from "@/components/grocery/mobile-bottom-nav";
 import { CartDrawer } from "@/components/grocery/cart-drawer";
 import { ProductModal } from "@/components/grocery/product-modal";
@@ -23,739 +22,549 @@ import { Footer } from "@/components/grocery/footer";
 import { useCartStore } from "@/store/cart";
 import { useUiStore } from "@/store/ui";
 
-// Static hero data — module-level to prevent recreation on every render
+// Single full-width hero slides (Vico style — compact, bright supermarket promotional)
 const HERO_SLIDES = [
   {
-    badge: "✨ Speciale Puglia",
-    title: "Olio Coratina & Focaccia Baresi",
-    description: "Scopri il sapore intenso delle olive Coratina estratte a freddo abbinato alla sofficità della focaccia barese cotta in forno a legna.",
-    image: "https://images.unsplash.com/photo-1506368249639-73a05d6f6488?q=80&w=800&auto=format&fit=crop",
-    btnText: "Fai la Spesa",
-    link: "/reparto?dept=dispensa"
+    badge: "PER I NOSTRI VICO LOVERS",
+    title: "Prodotti Italiani per i tuoi Amici a 4 Zampe",
+    subtitle: "Italian products online and emotions in one service. L'Italia a casa tua!",
+    bgColor: "#FFD1DC",
+    accentColor: "#1a3c2b",
+    textColor: "#1a1a1a",
+    btnText: "Scopri la Selezione",
+    btnBg: "#1a3c2b",
+    link: "/reparto?dept=dispensa",
+    imageUrl: "https://images.unsplash.com/photo-1607349913338-fca6f7fc42d0?q=80&w=900&auto=format&fit=crop",
   },
   {
-    badge: "🍷 Bollicine & Salumi",
-    title: "Franciacorta DOCG & Delicatessen",
-    description: "Il binomio perfetto per i tuoi aperitivi di lusso: bollicine Millesimate e Prosciutto di Parma DOP stagionato 18 mesi.",
-    image: "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?q=80&w=800&auto=format&fit=crop",
-    btnText: "Scopri Enoteca",
-    link: "/reparto?dept=enoteca"
+    badge: "SPEDIZIONE GRATUITA",
+    title: "Spesa Italiana Online",
+    subtitle: "Spedizione gratuita in tutta Europa da €49. Prodotti freschi a casa tua.",
+    bgColor: "#C8F7C5",
+    accentColor: "#1a3c2b",
+    textColor: "#1a1a1a",
+    btnText: "Inizia la Spesa",
+    btnBg: "#1a3c2b",
+    link: "/reparto",
+    imageUrl: "https://images.unsplash.com/photo-1610348725531-843dff563e2c?q=80&w=900&auto=format&fit=crop",
   },
   {
-    badge: "🧀 I Maestri Caseari",
-    title: "Parmigiano DOP & Bufala Campana",
-    description: "Selezionati dai migliori caseifici locali: Mozzarella di Bufala freschissima e Parmigiano stagionato 30 mesi ricchissimo di aromi.",
-    image: "https://images.unsplash.com/photo-1486299267070-83823f5448dd?q=80&w=800&auto=format&fit=crop",
-    btnText: "Ordina Latticini",
-    link: "/reparto?dept=latticini%20&%20salumi"
-  }
+    badge: "TUTTO SOTTO 2€",
+    title: "Risparmia ogni giorno",
+    subtitle: "Prodotti essenziali per la dispensa a prezzi bloccati, sempre freschi.",
+    bgColor: "#FFF9C4",
+    accentColor: "#f97316",
+    textColor: "#1a1a1a",
+    btnText: "Vedi le Offerte",
+    btnBg: "#f97316",
+    link: "/reparto",
+    imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?q=80&w=900&auto=format&fit=crop",
+  },
 ];
 const HERO_COUNT = HERO_SLIDES.length;
 
+// Vico-style product shelf with horizontal slider + badge label
+function ProductShelf({
+  badge,
+  badgeBg,
+  title,
+  linkHref,
+  linkText,
+  products,
+  cart,
+  onQuantityChange,
+  onQuickView,
+}: {
+  badge: string;
+  badgeBg: string;
+  title: string;
+  linkHref: string;
+  linkText: string;
+  products: Product[];
+  cart: { product: Product; quantity: number }[];
+  onQuantityChange: (id: string, qty: number) => void;
+  onQuickView: (p: Product) => void;
+}) {
+  const [offset, setOffset] = useState(0);
+  const visibleCount = 6;
+  const canLeft = offset > 0;
+  const canRight = offset + visibleCount < products.length;
+
+  return (
+    <section className="space-y-2">
+      {/* Shelf header: small badge left, "See all" right */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[11px] font-bold px-2.5 py-1 rounded-sm text-white uppercase tracking-wider"
+            style={{ background: badgeBg }}
+          >
+            {badge}
+          </span>
+          <h3 className="font-extrabold text-slate-900 text-[15px]">{title}</h3>
+        </div>
+        <Link href={linkHref} className="text-[12px] font-bold text-[#1a3c2b] hover:underline">
+          {linkText}
+        </Link>
+      </div>
+
+      {/* Slider wrapper */}
+      <div className="relative">
+        {canLeft && (
+          <button
+            onClick={() => setOffset((o) => Math.max(0, o - 1))}
+            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 z-10 w-8 h-8 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center hover:bg-slate-50 transition-all"
+            aria-label="Precedente"
+          >
+            <ChevronLeft className="w-4 h-4 text-slate-600" />
+          </button>
+        )}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3 overflow-hidden">
+          {products.slice(offset, offset + visibleCount).map((prod) => {
+            const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
+            return (
+              <ProductCard
+                key={prod.id}
+                product={prod}
+                quantityInCart={cartQty}
+                onQuantityChange={onQuantityChange}
+                onQuickView={onQuickView}
+              />
+            );
+          })}
+        </div>
+        {canRight && (
+          <button
+            onClick={() => setOffset((o) => Math.min(products.length - visibleCount, o + 1))}
+            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 z-10 w-8 h-8 bg-white border border-slate-200 rounded-full shadow flex items-center justify-center hover:bg-slate-50 transition-all"
+            aria-label="Successivo"
+          >
+            <ChevronRight className="w-4 h-4 text-slate-600" />
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+// 4-tile illustrated category card section — vibrant Vico style
+const CATEGORY_TILES = [
+  {
+    id: "casa & persona",
+    label: "Cura del Corpo",
+    bg: "#FFDEE9",
+    textColor: "#1a1a1a",
+    imageUrl: "https://images.unsplash.com/photo-1607868894064-2b6e7ed1b324?q=80&w=400&auto=format&fit=crop",
+  },
+  {
+    id: "dispensa",
+    label: "Snack Salati",
+    bg: "#FFF0B3",
+    textColor: "#1a1a1a",
+    imageUrl: "https://images.unsplash.com/photo-1621939514649-280e2ee25f60?q=80&w=400&auto=format&fit=crop",
+  },
+  {
+    id: "panetteria",
+    label: "Senza Glutine",
+    bg: "#FFDEDE",
+    textColor: "#1a1a1a",
+    imageUrl: "https://images.unsplash.com/photo-1619566636858-adf3ef46400b?q=80&w=400&auto=format&fit=crop",
+  },
+  {
+    id: "enoteca",
+    label: "Bevande & Vini",
+    bg: "#FFF0B3",
+    textColor: "#1a1a1a",
+    imageUrl: "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?q=80&w=400&auto=format&fit=crop",
+  },
+];
+
 export default function Home() {
   const router = useRouter();
-  // Page UI States
   const [activeTab, setActiveTab] = useState<"shop" | "search" | "cart" | "account">("shop");
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [toast, setToast] = useState<{ id: string; product: Product } | null>(null);
 
-  // Rotating Hero Slider State
+  // Hero slider
   const [heroIndex, setHeroIndex] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => {
-      setHeroIndex((prev) => (prev + 1) % HERO_COUNT);
-    }, 6000);
+    const timer = setInterval(() => setHeroIndex((prev) => (prev + 1) % HERO_COUNT), 6000);
     return () => clearInterval(timer);
   }, []);
+  const handlePrevSlide = useCallback(() => setHeroIndex((p) => (p - 1 + HERO_COUNT) % HERO_COUNT), []);
+  const handleNextSlide = useCallback(() => setHeroIndex((p) => (p + 1) % HERO_COUNT), []);
 
-  const handlePrevSlide = useCallback(() => {
-    setHeroIndex((prev) => (prev - 1 + HERO_COUNT) % HERO_COUNT);
-  }, []);
-
-  const handleNextSlide = useCallback(() => {
-    setHeroIndex((prev) => (prev + 1) % HERO_COUNT);
-  }, []);
-
-  // Zustand Global Cart Store integration
+  // Cart store
   const cart = useCartStore((state) => state.items);
   const addItem = useCartStore((state) => state.addItem);
   const removeItem = useCartStore((state) => state.removeItem);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
 
-  // Centralized Cart Handlers
   const handleQuantityChange = useCallback((productId: string, qty: number) => {
     const existing = useCartStore.getState().items.find((item) => item.product.id === productId);
     const productObj = PRODUCTS.find((p) => p.id === productId);
-
-    // Fire toast notification for new additions (not quantity changes)
-    if (!existing && qty === 1 && productObj) {
-      setToast({ id: String(Date.now()), product: productObj });
-    }
-
-    if (qty <= 0) {
-      removeItem(productId);
-    } else if (existing) {
-      updateQuantity(productId, qty);
-    } else if (productObj) {
-      addItem(productObj, qty);
-    }
+    if (!existing && qty === 1 && productObj) setToast({ id: String(Date.now()), product: productObj });
+    if (qty <= 0) removeItem(productId);
+    else if (existing) updateQuantity(productId, qty);
+    else if (productObj) addItem(productObj, qty);
   }, [addItem, removeItem, updateQuantity]);
 
-  // Synchronize bottom tab highlights with global overlay openings
   const cartOpen = useUiStore((state) => state.cartOpen);
   const searchOpen = useUiStore((state) => state.searchOpen);
-
   useEffect(() => {
-    if (cartOpen) {
-      setActiveTab("cart");
-    } else if (searchOpen) {
-      setActiveTab("search");
-    } else {
-      setActiveTab("shop");
-    }
+    if (cartOpen) setActiveTab("cart");
+    else if (searchOpen) setActiveTab("search");
+    else setActiveTab("shop");
   }, [cartOpen, searchOpen]);
 
-  // High-Density Categories & Shelves Filtering
-  const hotDeals = PRODUCTS.filter((p) => p.originalPrice && p.originalPrice > p.price).slice(0, 4);
-  const milanPopular = PRODUCTS.filter((p) => Number(p.id) % 2 === 0).slice(0, 4);
-  const organicEssentials = PRODUCTS.filter((p) => p.isOrganic).slice(0, 4);
-  const newArrivals = PRODUCTS.slice(4, 8);
-  const wineCollection = PRODUCTS.filter((p) => p.category === "Enoteca").slice(0, 4);
-  const chefRecommend = PRODUCTS.filter((p) => p.tags?.includes("Trafilata a Bronzo") || p.tags?.includes("Estratto a Freddo") || p.id === "10").slice(0, 4);
-  
-  // Returning Customer Simulated Shelves
-  const buyAgain = [PRODUCTS[0], PRODUCTS[1], PRODUCTS[10]]; // Olio, Paccheri, Mozzarella
-  const recentlyViewed = [PRODUCTS[2], PRODUCTS[11]]; // Parmigiano, Franciacorta
+  // Pad products to 12 for slider
+  const getShelfProducts = (filtered: Product[]) => {
+    if (filtered.length >= 12) return filtered.slice(0, 12);
+    const ids = new Set(filtered.map((p) => p.id));
+    const extra = PRODUCTS.filter((p) => !ids.has(p.id));
+    return [...filtered, ...extra].slice(0, 12);
+  };
+
+  const milanPopular = getShelfProducts(PRODUCTS.filter((p) => Number(p.id) % 2 === 0));
+  const hotDeals = getShelfProducts(PRODUCTS.filter((p) => p.originalPrice && p.originalPrice > p.price));
+  const wineCollection = getShelfProducts(PRODUCTS.filter((p) => p.category === "Enoteca"));
+  const organicEssentials = getShelfProducts(PRODUCTS.filter((p) => p.isOrganic));
+
+  const heroSlide = HERO_SLIDES[heroIndex];
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-8 flex flex-col font-sans">
-      
-      {/* 1. Flash Offer Ticker Ribbon */}
-      <div className="bg-accent text-accent-foreground py-2 px-4 text-center text-xs font-bold tracking-wide select-none animate-fadeIn">
-        🔥 OFFERTE VOLANTINO: Mozzarella di Bufala DOP a soli €5,90 e Detersivo Piatti Eco a -25%. Valido solo questa settimana!
+    <div className="min-h-screen bg-white pb-20 md:pb-8 flex flex-col font-sans text-slate-800">
+
+      {/* Promo bar */}
+      <div className="bg-red-600 text-white py-1.5 px-4 text-center text-xs font-bold tracking-wide select-none leading-none">
+        🔥 Spedizione gratuita in tutta Italia per ordini superiori a 80€!
       </div>
 
-      {/* 2. Responsive Header System */}
-      <DesktopNavbar
-        onCategorySelect={() => {}}
-      />
+      {/* Header System */}
+      <DesktopNavbar onCategorySelect={(catId) => router.push(`/reparto?dept=${catId}`)} />
+      <MobileNavbar onCategorySelect={(catId) => router.push(`/reparto?dept=${catId}`)} />
 
-      <MobileNavbar
-        onCategorySelect={() => {}}
-      />
+      {/* Main layout */}
+      <main className="flex-grow max-w-7xl w-full mx-auto px-4 md:px-6 py-4 md:py-5 space-y-6">
 
-
-      {/* 3. High-Density Homepage Body */}
-      <main className="flex-grow max-w-7xl w-full mx-auto px-4 md:px-6 py-6 md:py-8 space-y-10">
-        
-        {/* HOMEPAGE SECTION 1: World-Class Interactive Rotating Hero Slider */}
-        <section className="bg-card border border-border/80 rounded-3xl overflow-hidden shadow-premium relative h-[420px] md:h-[460px] select-none flex items-center">
-          {/* Background image display */}
+        {/* SECTION 1: HERO — single compact full-width banner, Vico proportions */}
+        <section
+          className="relative w-full rounded-md overflow-hidden h-[200px] md:h-[240px] flex items-center select-none"
+          style={{ background: heroSlide.bgColor }}
+        >
+          {/* Background illustration */}
           <div className="absolute inset-0 z-0">
             <Image
-              src={HERO_SLIDES[heroIndex].image}
-              alt={HERO_SLIDES[heroIndex].title}
+              src={heroSlide.imageUrl}
+              alt={heroSlide.title}
               fill
               sizes="100vw"
-              className="object-cover transition-all duration-1000 ease-in-out filter brightness-[0.8]"
-              priority={true}
+              className="object-cover opacity-20 transition-all duration-700"
+              priority
             />
-            <div className="absolute inset-0 bg-gradient-to-r from-espresso/90 via-espresso/60 to-transparent" />
           </div>
 
-          {/* Left Arrow */}
+          {/* Slider arrows */}
           <button
             onClick={handlePrevSlide}
-            className="absolute left-4 z-20 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md active:scale-95 transition-all"
+            className="absolute left-3 z-20 w-7 h-7 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center transition-all"
             aria-label="Slide precedente"
           >
-            <ChevronLeft className="w-5 h-5 stroke-[2.5]" />
+            <ChevronLeft className="w-4 h-4" style={{ color: heroSlide.accentColor }} />
           </button>
-
-          {/* Right Arrow */}
           <button
             onClick={handleNextSlide}
-            className="absolute right-4 z-20 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md active:scale-95 transition-all"
+            className="absolute right-3 z-20 w-7 h-7 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center transition-all"
             aria-label="Prossima slide"
           >
-            <ChevronRight className="w-5 h-5 stroke-[2.5]" />
+            <ChevronRight className="w-4 h-4" style={{ color: heroSlide.accentColor }} />
           </button>
 
-          {/* Content Block */}
-          <div className="relative z-10 pl-6 pr-6 md:pl-16 max-w-2xl text-white space-y-5">
-            <Badge variant="success" className="bg-white/15 backdrop-blur-md text-white border-white/25 py-1 px-3.5 font-bold text-[10px] tracking-wider uppercase">
-              {HERO_SLIDES[heroIndex].badge}
-            </Badge>
-            <h2 className="font-serif text-4xl md:text-5xl font-bold tracking-tight leading-tight">
-              {HERO_SLIDES[heroIndex].title}
-            </h2>
-            <p className="text-sm text-white/90 leading-relaxed max-w-md font-medium">
-              {HERO_SLIDES[heroIndex].description}
-            </p>
-            <div className="flex gap-3 pt-2">
-              <Link href={HERO_SLIDES[heroIndex].link}>
-                <Button variant="accent" size="lg" className="font-bold text-xs h-12 shadow-soft px-8">
-                  {HERO_SLIDES[heroIndex].btnText}
-                </Button>
-              </Link>
+          {/* Slide content */}
+          <div className="relative z-10 px-8 md:px-14 max-w-lg">
+            <div
+              className="inline-block text-[10px] font-extrabold tracking-widest uppercase px-2 py-0.5 rounded-sm mb-3"
+              style={{ background: heroSlide.accentColor, color: "#fff" }}
+            >
+              {heroSlide.badge}
             </div>
+            <h2
+              className="font-sans text-2xl md:text-3xl font-extrabold leading-tight mb-2"
+              style={{ color: heroSlide.textColor }}
+            >
+              {heroSlide.title}
+            </h2>
+            <p
+              className="text-[12px] leading-relaxed font-semibold mb-4 max-w-sm"
+              style={{ color: heroSlide.textColor + "cc" }}
+            >
+              {heroSlide.subtitle}
+            </p>
+            <Link href={heroSlide.link}>
+              <Button
+                className="font-bold text-xs h-9 px-5 text-white rounded-md transition-colors"
+                style={{ background: heroSlide.btnBg }}
+              >
+                {heroSlide.btnText}
+              </Button>
+            </Link>
           </div>
 
-          {/* Indicator dots bottom */}
-          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+          {/* Indicator dots */}
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 flex gap-1.5">
             {HERO_SLIDES.map((_, idx) => (
               <button
                 key={idx}
                 onClick={() => setHeroIndex(idx)}
-                className={`w-2.5 h-2.5 rounded-full transition-all ${
-                  heroIndex === idx ? "bg-white w-6" : "bg-white/40"
-                }`}
-                aria-label={`Slide index ${idx}`}
+                className={`h-1.5 rounded-full transition-all ${heroIndex === idx ? "w-5 bg-slate-700" : "w-1.5 bg-slate-400/50"}`}
+                aria-label={`Slide ${idx}`}
               />
             ))}
           </div>
         </section>
 
-        {/* HOMEPAGE SECTION 2: Swipeable Department Categories */}
-        <section className="space-y-4">
-          <div className="flex justify-between items-baseline select-none">
-            <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Esplora i Reparti Spesa
-            </h3>
-            <Link href="/reparto" className="text-xs font-bold text-primary hover:underline cursor-pointer">
-              Vedi Tutti ({CATEGORIES.length})
-            </Link>
-          </div>
-
-          <div className="flex gap-4 overflow-x-auto scrollbar-none snap-x touch-pan-x px-4 -mx-4 md:px-0 md:mx-0 md:grid md:grid-cols-6">
-            {CATEGORIES.map((cat) => (
-              <div key={cat.id} className="snap-start flex-shrink-0 w-[180px] md:w-auto">
-                <CategoryCard
-                  category={cat}
-                  onClick={() => {
-                    router.push(`/reparto?dept=${cat.id}`);
-                  }}
-                />
-              </div>
-            ))}
+        {/* SECTION 2: TRUSTPILOT STRIP — compact Vico style */}
+        <section className="bg-white border border-slate-200 rounded-md py-3 px-4 flex flex-col md:flex-row items-center justify-center gap-2 select-none text-center">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-slate-900 text-xs">★ Trustpilot</span>
+            <div className="flex gap-0.5">
+              {[1,2,3,4,5].map(s => (
+                <div key={s} className="w-4 h-4 bg-[#00b67a] flex items-center justify-center text-white text-[9px] font-bold rounded-sm">★</div>
+              ))}
+            </div>
+            <span className="text-[11px] font-bold text-slate-700">Eccellente <strong>4.8 / 5</strong></span>
+            <span className="text-slate-400 text-[11px]">— 1.3k recensioni</span>
           </div>
         </section>
 
-        {/* MOCK RETURNING USER SECTION (Highly realistic buy again staple lists) */}
-        <section className="bg-secondary/15 rounded-3xl p-6 md:p-8 border border-[#EFECE6] select-none space-y-6">
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#1C3B2B] text-white font-bold flex items-center justify-center text-sm shadow-soft">
-                RM
+        {/* SECTION 3: TAGLINE */}
+        <section className="text-center max-w-2xl mx-auto space-y-1 select-none">
+          <h2 className="font-sans text-lg md:text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
+            Prodotti italiani online ed emozioni in un unico servizio.
+          </h2>
+          <p className="text-[12px] text-slate-400 font-semibold">
+            L&apos;Italia a casa tua!{" "}
+            <Link href="/shipping" className="underline text-[#1a3c2b]">SPEDIZIONE GRATUITA IN TUTTA EUROPA DA €49</Link>
+          </p>
+        </section>
+
+        {/* SECTION 4: FOUR SERVICE PILLARS */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 border-y border-slate-100 py-4 select-none">
+          {[
+            { icon: <Leaf className="w-4 h-4 text-[#1a3c2b]" />, title: "Rispettosi dell'Ambiente", sub: "Packaging eco-compatibile" },
+            { icon: <Truck className="w-4 h-4 text-[#1a3c2b]" />, title: "Spedizione Gratuita", sub: "Da €49 in tutta Europa" },
+            { icon: <Shield className="w-4 h-4 text-[#1a3c2b]" />, title: "Veloce e Sicuro", sub: "Consegna in 2-3 giorni" },
+            { icon: <Sparkles className="w-4 h-4 text-[#1a3c2b]" />, title: "Made in Italy", sub: "100% prodotti autentici" },
+          ].map(({ icon, title, sub }) => (
+            <div key={title} className="flex items-center gap-2.5 p-2">
+              <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center flex-shrink-0">
+                {icon}
               </div>
               <div>
-                <h3 className="font-serif text-lg md:text-xl font-bold text-foreground">
-                  Bentornato, Ronan! Acquista di Nuovo
-                </h3>
-                <p className="text-[10px] md:text-xs text-muted-foreground font-semibold">
-                  I tuoi articoli preferiti acquistati regolarmente in base alle spese precedenti.
-                </p>
+                <h4 className="text-[11px] font-extrabold text-slate-900 leading-tight">{title}</h4>
+                <p className="text-[10px] text-slate-400 font-medium mt-0.5">{sub}</p>
               </div>
             </div>
-            <button
-              onClick={() => alert("Reordering all staples...")}
-              className="text-xs font-bold text-primary flex items-center gap-1 hover:underline"
+          ))}
+        </section>
+
+        {/* SECTION 5: PRODUCT SHELF #1 — I Più Venduti */}
+        <ProductShelf
+          badge="Sconti su tutte le offerte"
+          badgeBg="#1a3c2b"
+          title="I Più Venduti"
+          linkHref="/reparto"
+          linkText="Vedi tutte le offerte"
+          products={milanPopular}
+          cart={cart}
+          onQuantityChange={handleQuantityChange}
+          onQuickView={(p) => router.push(`/prodotto/${getProductHandle(p)}`)}
+        />
+
+        {/* SECTION 6: CATEGORY TILES — 4 illustrated cards (Vico style) */}
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-3 select-none">
+          {CATEGORY_TILES.map((tile) => (
+            <div
+              key={tile.id}
+              onClick={() => router.push(`/reparto?dept=${tile.id}`)}
+              className="relative h-[110px] rounded-md overflow-hidden cursor-pointer group"
+              style={{ background: tile.bg }}
             >
-              <RefreshCw className="w-3.5 h-3.5" /> Riordina Tutto
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {buyAgain.map((prod) => {
-              const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
-              return (
-                <div key={prod.id} className="bg-white p-3 rounded-2xl border border-border shadow-soft flex items-center gap-3.5">
-                  <div className="w-16 h-16 relative flex-shrink-0 rounded-xl overflow-hidden border bg-[#FAF7F2]">
-                    <Image
-                      src={prod.imageUrl}
-                      alt={prod.name}
-                      fill
-                      sizes="64px"
-                      className="object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
-                        e.currentTarget.srcset = "";
-                      }}
-                    />
-                  </div>
-                  <div className="min-w-0 flex-grow flex flex-col justify-between h-16">
-                    <div>
-                      <h4 className="font-serif font-bold text-xs truncate leading-snug">{prod.name}</h4>
-                      <span className="text-[10px] text-muted-foreground block">{prod.unit}</span>
-                    </div>
-                    <div className="flex justify-between items-center mt-1">
-                      <span className="text-xs font-bold text-primary">€{prod.price.toFixed(2)}</span>
-                      {cartQty === 0 ? (
-                        <button
-                          onClick={() => handleQuantityChange(prod.id, 1)}
-                          className="bg-[#1C3B2B] text-white hover:bg-[#1C3B2B]/90 font-bold text-[10px] py-1 px-2.5 rounded-lg active:scale-95 transition-all shadow-sm"
-                        >
-                          + Aggiungi
-                        </button>
-                      ) : (
-                        <span className="text-[10px] font-bold text-primary bg-primary/5 border border-primary/15 px-2 py-0.5 rounded">
-                          Nel Carrello ({cartQty})
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* HOMEPAGE SECTION 3: Asymmetrical Editorial Banners (Premium Gastronomy storytelling) */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 select-none">
-          {/* Main Editorial Spotlight: Alba & Chianti (8 Columns) */}
-          <div className="lg:col-span-8 bg-[#FAF7F2] rounded-2xl border border-[#EFECE6] overflow-hidden shadow-soft flex flex-col md:flex-row justify-between relative group min-h-[240px]">
-            <div className="p-6 md:p-8 flex flex-col justify-between z-10 md:max-w-[55%] space-y-4">
-              <div className="space-y-2">
-                <Badge variant="primary" className="bg-primary/95 font-bold text-[9px] uppercase tracking-widest text-primary-foreground py-0.5 px-2">
-                  La Caccia d&apos;Autunno
-                </Badge>
-                <h4 className="font-serif text-2xl md:text-3xl font-bold tracking-tight text-foreground leading-tight">
-                  Tartufo d&apos;Alba & <br />
-                  Grandi Rossi Toscani
-                </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed font-semibold">
-                  Il profumo avvolgente del Tartufo Bianco Pregiato d&apos;Alba incontra le note fruttate del Chianti Classico Riserva DOCG. Un connubio raro di profonda tradizione boschiva piemontese e collina toscana.
-                </p>
+              {/* Illustrated background image */}
+              <div className="absolute inset-0 z-0">
+                <Image
+                  src={tile.imageUrl}
+                  alt={tile.label}
+                  fill
+                  sizes="(max-width: 768px) 50vw, 25vw"
+                  className="object-cover opacity-55 group-hover:scale-105 transition-transform duration-500"
+                />
               </div>
-              <div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => {
-                    router.push("/reparto?dept=dispensa");
-                  }}
-                  className="font-bold text-xs"
-                >
-                  Esplora Selezione
-                </Button>
+              {/* Label — bottom left, bold on pastel bg */}
+              <div className="absolute inset-0 flex flex-col justify-end p-3 z-10">
+                <h4 className="font-extrabold text-slate-900 text-[13px] leading-tight drop-shadow-sm">{tile.label}</h4>
               </div>
             </div>
-            
-            <div className="md:w-[45%] h-[180px] md:h-full relative overflow-hidden bg-muted/10 border-t md:border-t-0 md:border-l border-border/60">
+          ))}
+        </section>
+
+        {/* SECTION 7: PRODUCT SHELF #2 — Offerte Speciali */}
+        <ProductShelf
+          badge="Volantino Sconti"
+          badgeBg="#ef4444"
+          title="Offerte Speciali Settimanali"
+          linkHref="/reparto"
+          linkText="Vedi tutte le offerte"
+          products={hotDeals}
+          cart={cart}
+          onQuantityChange={handleQuantityChange}
+          onQuickView={(p) => router.push(`/prodotto/${getProductHandle(p)}`)}
+        />
+
+        {/* SECTION 8: PRODUCT SHELF #3 — Enoteca */}
+        <ProductShelf
+          badge="Cantina Italiana"
+          badgeBg="#86198f"
+          title="Enoteca & Bollicine"
+          linkHref="/reparto?dept=enoteca"
+          linkText="Scopri l'Enoteca"
+          products={wineCollection}
+          cart={cart}
+          onQuantityChange={handleQuantityChange}
+          onQuickView={(p) => router.push(`/prodotto/${getProductHandle(p)}`)}
+        />
+
+        {/* SECTION 9: PRODUCT SHELF #4 — Biologico */}
+        <ProductShelf
+          badge="Spesa Sana Bio"
+          badgeBg="#059669"
+          title="Biologico Certificato"
+          linkHref="/reparto?organic=true"
+          linkText="Vedi Biologico"
+          products={organicEssentials}
+          cart={cart}
+          onQuantityChange={handleQuantityChange}
+          onQuickView={(p) => router.push(`/prodotto/${getProductHandle(p)}`)}
+        />
+
+        {/* SECTION 10: FOUR MARKETING CARDS (Vico style — image + overlay CTA) */}
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 select-none">
+          {[
+            {
+              title: "Scopri chi siamo",
+              sub: "La tua storia con i produttori per eccellenze locali.",
+              cta: "Scopri Alimentari",
+              ctaBg: "#1a3c2b",
+              img: "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop",
+              href: "/reparto",
+            },
+            {
+              title: "Gift Card",
+              sub: "Regala i profumi ed i sapori tipici di casa.",
+              cta: "Acquista una Gift Box",
+              ctaBg: "#1a3c2b",
+              img: "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?q=80&w=400&auto=format&fit=crop",
+              href: "#",
+            },
+            {
+              title: "Press & News",
+              sub: "Leggici su Gambero Rosso e Vanity Fair.",
+              cta: "Leggi gli Articoli",
+              ctaBg: "#1a3c2b",
+              img: "https://images.unsplash.com/photo-1506368249639-73a05d6f6488?q=80&w=400&auto=format&fit=crop",
+              href: "#",
+            },
+            {
+              title: "Hai un Desiderio?",
+              sub: "Dicci cosa cerchi, lo troveremo per te.",
+              cta: "Suggerisci",
+              ctaBg: "#1a3c2b",
+              img: "https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=400&auto=format&fit=crop",
+              href: "#",
+            },
+          ].map(({ title, sub, cta, ctaBg, img, href }) => (
+            <div
+              key={title}
+              onClick={() => router.push(href)}
+              className="relative rounded-md overflow-hidden h-[130px] cursor-pointer group"
+            >
               <Image
-                src="https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?q=80&w=400&auto=format&fit=crop"
-                alt="Selected red wines and truffles"
+                src={img}
+                alt={title}
                 fill
-                sizes="(max-width: 768px) 100vw, 400px"
-                className="object-cover group-hover:scale-[1.015] transition-transform duration-700 ease-expo-out"
+                sizes="25vw"
+                className="object-cover group-hover:scale-105 transition-transform duration-300 brightness-105"
               />
+              {/* Very light overlay so image is clearly visible — Vico style */}
+              <div className="absolute inset-0 bg-black/10 group-hover:bg-black/15 transition-colors" />
+              <div className="absolute inset-0 flex flex-col justify-between p-3 z-10">
+                <div>
+                  <h4 className="font-extrabold text-white text-[13px] leading-snug drop-shadow">{title}</h4>
+                  <p className="text-[10px] text-white/90 mt-0.5 leading-relaxed line-clamp-2 drop-shadow">{sub}</p>
+                </div>
+                <button
+                  className="self-start text-[10px] font-bold text-white px-2.5 py-1 rounded-sm transition-all shadow-sm"
+                  style={{ background: ctaBg }}
+                >
+                  {cta}
+                </button>
+              </div>
             </div>
-          </div>
+          ))}
+        </section>
 
-          {/* Secondary Editorial Spotlight: Bronte & Modena (4 Columns) */}
-          <div className="lg:col-span-4 bg-[#E2EAE5]/40 rounded-2xl border border-[#EFECE6] p-6 flex flex-col justify-between shadow-soft min-h-[240px] relative overflow-hidden group">
-            <div className="space-y-3 z-10 relative">
-              <Badge variant="accent" className="font-bold text-[9px] uppercase tracking-widest py-0.5 px-2 text-white">
-                Eccellenze del Sud & Centro
-              </Badge>
-              <h4 className="font-serif text-2xl font-bold tracking-tight text-foreground leading-tight">
-                Pistacchio di Bronte & <br />
-                Balsamico Invecchiato
-              </h4>
-              <p className="text-xs text-muted-foreground leading-relaxed font-semibold">
-                La dolcezza vulcanica dell&apos;Oro Verde dell&apos;Etna unita alla complessità sciropposa dell&apos;Aceto Balsamico Tradizionale di Modena IGP.
-              </p>
-            </div>
-            
-            <div className="z-10 relative mt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  router.push("/reparto?dept=dispensa");
-                }}
-                className="font-bold text-xs bg-white/80 hover:bg-white text-foreground"
+        {/* SECTION 11: NEWSLETTER — yellow two-column Vico layout */}
+        <section className="rounded-md overflow-hidden grid grid-cols-1 md:grid-cols-2 items-stretch h-auto md:h-[240px]" style={{ background: "#FFE14D" }}>
+          {/* Left: Form */}
+          <div className="p-6 md:p-8 flex flex-col justify-center space-y-3">
+            <span className="text-[9px] font-extrabold text-slate-800 uppercase tracking-widest block">
+              Unisciti alla nostra community!
+            </span>
+            <h4 className="font-sans text-xl font-extrabold tracking-tight text-slate-900 leading-tight">
+              Ottieni subito 5€ di sconto sulla spesa
+            </h4>
+            <p className="text-[11px] text-slate-700 font-semibold leading-relaxed">
+              Ricevi sconti, novità del mese ed offerte esclusive.
+            </p>
+            <div className="space-y-2 max-w-sm">
+              <input type="text" placeholder="Nome" className="w-full h-9 bg-white border border-slate-300 rounded px-3 text-xs outline-none font-semibold" />
+              <input type="email" placeholder="Email" className="w-full h-9 bg-white border border-slate-300 rounded px-3 text-xs outline-none font-semibold" />
+              <div className="flex gap-2">
+                <input type="tel" placeholder="Telefono" className="flex-1 h-9 bg-white border border-slate-300 rounded px-3 text-xs outline-none font-semibold" />
+                <select className="h-9 bg-white border border-slate-300 rounded px-2 text-xs outline-none font-semibold">
+                  <option>🇮🇹 IT</option>
+                  <option>🇬🇧 EN</option>
+                </select>
+              </div>
+              <button
+                onClick={() => alert("Iscritto! Controlla la tua email.")}
+                className="w-full h-9 text-white font-bold text-xs rounded transition-all"
+                style={{ background: "#1a3c2b" }}
               >
-                Scopri Specialità
-              </Button>
+                Iscriviti
+              </button>
             </div>
+          </div>
 
-            <div className="absolute right-0 bottom-0 opacity-5 pointer-events-none transform translate-y-4 translate-x-4 text-primary">
-              <Leaf className="w-36 h-36" />
-            </div>
+          {/* Right: Image */}
+          <div className="relative hidden md:block h-full w-full">
+            <Image
+              src="/vico_newsletter_box.png"
+              alt="Scatola Spesa Alimentari"
+              fill
+              sizes="50vw"
+              className="object-cover"
+              priority
+            />
           </div>
         </section>
 
-        {/* DENSE GRID SHELVES LISTING (World-class marketplace layout) */}
-        
-        {/* SHELF 1: I più venduti (Asymmetrical Visual Merchandising Grid) */}
-        <section className="space-y-6 select-none">
-          <div className="flex justify-between items-baseline">
-            <div className="space-y-1">
-              <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                I Più Venduti a Milano
-              </h3>
-              <p className="text-xs text-muted-foreground font-semibold">Le specialità italiane preferite dai nostri clienti, DOP e biologiche.</p>
-            </div>
-            <Link href="/reparto" className="text-xs font-bold text-primary hover:underline cursor-pointer">
-              Vedi Tutti
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            {/* Premium Editorial Spotlight Card (Col-span 4) */}
-            <div className="md:col-span-4 bg-[#FAF7F2] border border-[#EFECE6] rounded-2xl p-6 flex flex-col justify-between shadow-soft relative overflow-hidden group min-h-[280px]">
-              <div className="space-y-3 z-10 relative">
-                <Badge variant="success" className="bg-[#1C3B2B]/10 text-[#1C3B2B] border-none font-bold text-[9px] uppercase tracking-widest py-0.5 px-2">
-                  Selezione Locali
-                </Badge>
-                <h4 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground leading-tight">
-                  Le Eccellenze della Terra di Bari
-                </h4>
-                <p className="text-xs text-muted-foreground leading-relaxed font-semibold">
-                  Dagli uliveti secolari della cultivar Coratina alle focacce lievitate 24h e cotte nei forni a legna di Altamura.
-                </p>
-              </div>
-              <div className="z-10 relative mt-4">
-                <button
-                  onClick={() => router.push("/reparto?dept=dispensa")}
-                  className="text-xs font-bold text-primary underline"
-                >
-                  Scopri la filiera corta
-                </button>
-              </div>
-              <div className="absolute right-0 bottom-0 opacity-5 pointer-events-none transform translate-y-6 translate-x-6 text-[#1C3B2B]">
-                <Leaf className="w-36 h-36" />
-              </div>
-            </div>
-
-            {/* Product Cards Row (Col-span 8) - 3 Columns */}
-            <div className="md:col-span-8 grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {milanPopular.slice(0, 3).map((prod) => {
-                const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
-                return (
-                  <ProductCard
-                    key={prod.id}
-                    product={prod}
-                    quantityInCart={cartQty}
-                    onQuantityChange={handleQuantityChange}
-                    onQuickView={(p) => {
-                      router.push(`/prodotto/${getProductHandle(p)}`);
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* SHELF 2: Offerte speciale */}
-        <section className="space-y-6 select-none">
-          <div className="flex justify-between items-baseline">
-            <div className="space-y-1">
-              <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-                📂 Offerte Speciali
-              </h3>
-              <p className="text-xs text-muted-foreground font-semibold">Sconti e promozioni settimanali da non perdere.</p>
-            </div>
-            <Link href="/reparto" className="text-xs font-bold text-primary hover:underline cursor-pointer">
-              Vedi Tutti Sconti
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {hotDeals.map((prod) => {
-              const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
-              return (
-                <ProductCard
-                  key={prod.id}
-                  product={prod}
-                  quantityInCart={cartQty}
-                  onQuantityChange={handleQuantityChange}
-                  onQuickView={(p) => {
-                    router.push(`/prodotto/${getProductHandle(p)}`);
-                  }}
-                />
-              );
-            })}
-          </div>
-        </section>
-
-        {/* SHELF 3: Nuovi Arrivi */}
-        <section className="space-y-6 select-none">
-          <div className="flex justify-between items-baseline">
-            <div className="space-y-1">
-              <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                Nuovi Arrivi Regionali
-              </h3>
-              <p className="text-xs text-muted-foreground font-semibold">Articoli gastrononici appena inseriti nel catalogo, tracciati in filiera.</p>
-            </div>
-            <Link href="/reparto" className="text-xs font-bold text-primary hover:underline cursor-pointer">
-              Scopri Novità
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {newArrivals.map((prod) => {
-              const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
-              return (
-                <ProductCard
-                  key={prod.id}
-                  product={prod}
-                  quantityInCart={cartQty}
-                  onQuantityChange={handleQuantityChange}
-                  onQuickView={(p) => {
-                    router.push(`/prodotto/${getProductHandle(p)}`);
-                  }}
-                />
-              );
-            })}
-          </div>
-        </section>
-
-        {/* SHELF 4: Biologico essenziale */}
-        <section className="space-y-6 select-none">
-          <div className="flex justify-between items-baseline">
-            <div className="space-y-1">
-              <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                Biologico Certificato & Sostenibile
-              </h3>
-              <p className="text-xs text-muted-foreground font-semibold">La spesa sana che rispetta l&apos;ambiente, 100% da colture biologiche.</p>
-            </div>
-            <Link href="/reparto?organic=true" className="text-xs font-bold text-primary hover:underline cursor-pointer">
-              Vedi Bio
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {organicEssentials.map((prod) => {
-              const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
-              return (
-                <ProductCard
-                  key={prod.id}
-                  product={prod}
-                  quantityInCart={cartQty}
-                  onQuantityChange={handleQuantityChange}
-                  onQuickView={(p) => {
-                    router.push(`/prodotto/${getProductHandle(p)}`);
-                  }}
-                />
-              );
-            })}
-          </div>
-        </section>
-
-        {/* SHELF 5: Enoteca */}
-        <section className="space-y-6 select-none">
-          <div className="flex justify-between items-baseline">
-            <div className="space-y-1">
-              <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                Enoteca: Grandi Cantine & Abbinamenti
-              </h3>
-              <p className="text-xs text-muted-foreground font-semibold">Spumanti Millesimati e vini DOC/DOCG conservati in cantina climatizzata.</p>
-            </div>
-            <Link href="/reparto?dept=enoteca" className="text-xs font-bold text-primary hover:underline cursor-pointer">
-              Sfoglia Cantina
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            {/* Wine Editorial Spotlight Card (Col-span 4) */}
-            <div className="md:col-span-4 bg-primary text-primary-foreground rounded-2xl p-6 flex flex-col justify-between shadow-soft min-h-[280px] relative overflow-hidden group">
-              <div className="space-y-3 z-10 relative">
-                <Badge variant="accent" className="bg-white/10 text-white border-none font-bold text-[9px] uppercase tracking-widest py-0.5 px-2">
-                  Metodo Classico
-                </Badge>
-                <h4 className="font-serif text-xl md:text-2xl font-bold tracking-tight mt-1 leading-tight">
-                  La Cantina Climatizzata Alimentari
-                </h4>
-                <p className="text-xs text-white/80 leading-relaxed font-semibold">
-                  Tutte le nostre bottiglie riposano a temperatura e umidità costanti, garantendo la conservazione perfetta delle proprietà organolettiche e aromi.
-                </p>
-              </div>
-              <div className="z-10 relative mt-4">
-                <button
-                  onClick={() => router.push("/reparto?dept=enoteca")}
-                  className="text-xs font-bold text-accent hover:underline"
-                >
-                  Sfoglia la cantina
-                </button>
-              </div>
-              <div className="absolute right-0 bottom-0 opacity-5 pointer-events-none transform translate-y-6 translate-x-6 text-white">
-                <Sparkles className="w-36 h-36" />
-              </div>
-            </div>
-
-            {/* Product Cards Row (Col-span 8) - 3 Columns */}
-            <div className="md:col-span-8 grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {wineCollection.slice(0, 3).map((prod) => {
-                const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
-                return (
-                  <ProductCard
-                    key={prod.id}
-                    product={prod}
-                    quantityInCart={cartQty}
-                    onQuantityChange={handleQuantityChange}
-                    onQuickView={(p) => {
-                      router.push(`/prodotto/${getProductHandle(p)}`);
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
-        {/* SHELF 6: Consigli dello chef */}
-        <section className="space-y-6 select-none">
-          <div className="flex justify-between items-baseline">
-            <div className="space-y-1">
-              <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                Consigliati dallo Chef
-              </h3>
-              <p className="text-xs text-muted-foreground font-semibold">Gli ingredienti ideali per comporre ricette tradizionali della gastronomia italiana.</p>
-            </div>
-            <Link href="/reparto" className="text-xs font-bold text-primary hover:underline cursor-pointer">
-              Scopri Ricette
-            </Link>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {chefRecommend.map((prod) => {
-              const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
-              return (
-                <ProductCard
-                  key={prod.id}
-                  product={prod}
-                  quantityInCart={cartQty}
-                  onQuantityChange={handleQuantityChange}
-                  onQuickView={(p) => {
-                    router.push(`/prodotto/${getProductHandle(p)}`);
-                  }}
-                />
-              );
-            })}
-          </div>
-        </section>
-
-        {/* SHELF 7: Visualizzati di recente */}
-        <section className="space-y-6 select-none">
-          <div className="flex justify-between items-baseline">
-            <div className="space-y-1">
-              <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground">
-                Visualizzati Di Recente
-              </h3>
-              <p className="text-xs text-muted-foreground font-semibold">I prodotti che hai consultato nelle ultime sessioni di spesa.</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-            {recentlyViewed.map((prod) => {
-              const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
-              return (
-                <ProductCard
-                  key={prod.id}
-                  product={prod}
-                  quantityInCart={cartQty}
-                  onQuantityChange={handleQuantityChange}
-                  onQuickView={(p) => {
-                    router.push(`/prodotto/${getProductHandle(p)}`);
-                  }}
-                />
-              );
-            })}
-          </div>
-        </section>
-
-        {/* HOMEPAGE SECTION 7: Premium Gift Card Promotional Spotlight (Dark contrast banner) */}
-        <section className="bg-primary text-primary-foreground rounded-2xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-center gap-6 select-none shadow-premium">
-          <div className="space-y-2 md:max-w-[65%] text-center md:text-left">
-            <span className="text-[10px] font-bold text-accent bg-white/10 px-2 py-0.5 rounded uppercase tracking-widest leading-none">Regala l&apos;eccellenza</span>
-            <h4 className="font-serif text-2xl md:text-3xl font-bold tracking-tight mt-2">
-              Idee Regalo & Carte Regalo Alimentari
-            </h4>
-            <p className="text-xs text-white/80 leading-relaxed font-semibold">
-              Sorprendi le persone che ami con una Gift Card digitale o un cesto gastronomico personalizzato contenente le nostre selezioni DOP.
-            </p>
-          </div>
-          <button
-            onClick={() => alert("Redirecting to Shopify Gift Card Page...")}
-            className="px-6 h-12 bg-white text-primary hover:bg-white/95 font-bold text-sm rounded-lg flex items-center justify-center gap-2 flex-shrink-0 active:scale-95 transition-all shadow-soft"
-          >
-            <Gift className="w-4.5 h-4.5 stroke-[2]" />
-            Acquista Gift Card
-          </button>
-        </section>
-
-        {/* HOMEPAGE SECTION 8: Trust + Cold Chain Delivery Pillars */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-border/80 select-none">
-          <div className="flex gap-4 p-5 bg-card border border-border/60 rounded-xl shadow-soft">
-            <div className="w-10 h-10 rounded-full bg-secondary/30 flex items-center justify-center text-primary flex-shrink-0">
-              <Truck className="w-5 h-5 stroke-[2]" />
-            </div>
-            <div>
-              <h4 className="font-serif font-bold text-base text-foreground leading-snug">Consegna Refrigerata 24h</h4>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed font-semibold">
-                Spediamo in contenitori termici brevettati per mantenere intatta la catena del freddo (+4°C) e la freschezza dei cibi.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-4 p-5 bg-card border border-border/60 rounded-xl shadow-soft">
-            <div className="w-10 h-10 rounded-full bg-secondary/30 flex items-center justify-center text-primary flex-shrink-0">
-              <Shield className="w-5 h-5 stroke-[2]" />
-            </div>
-            <div>
-              <h4 className="font-serif font-bold text-base text-foreground leading-snug">Artigianato DOP & Certificato</h4>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed font-semibold">
-                Tutti i formaggi, salumi e oli sono corredati da certificato D.O.P. di autenticità del consorzio di tutela.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex gap-4 p-5 bg-card border border-border/60 rounded-xl shadow-soft">
-            <div className="w-10 h-10 rounded-full bg-secondary/30 flex items-center justify-center text-primary flex-shrink-0">
-              <Sparkles className="w-5 h-5 stroke-[2]" />
-            </div>
-            <div>
-              <h4 className="font-serif font-bold text-base text-foreground leading-snug">Filiera Tracciabile e Corta</h4>
-              <p className="text-xs text-muted-foreground mt-1 leading-relaxed font-semibold">
-                Acquistiamo direttamente alla fonte senza intermediari, remunerando equamente i piccoli produttori italiani.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* HOMEPAGE SECTION 9: Email Newsletter */}
-        <section className="bg-card border border-border/80 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-center gap-6 select-none shadow-soft">
-          <div className="space-y-1 md:max-w-[55%] text-center md:text-left">
-            <h4 className="font-serif text-xl md:text-2xl font-bold tracking-tight text-foreground">
-              Unisciti alla nostra tavola
-            </h4>
-            <p className="text-xs text-muted-foreground font-semibold leading-relaxed">
-              Iscriviti per ricevere ricette stagionali di chef italiani, storie di artigiani locali e uno sconto del 10% sul primo ordine.
-            </p>
-          </div>
-          <div className="flex gap-2 w-full md:w-auto max-w-sm flex-shrink-0">
-            <div className="relative flex-grow">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="email"
-                placeholder="La tua email..."
-                className="w-full h-11 bg-background border border-border/80 rounded-lg pl-10 pr-3 text-xs outline-none focus:border-primary font-semibold shadow-soft"
-              />
-            </div>
-            <Button size="sm" variant="primary" className="h-11 px-5 font-bold text-xs shadow-sm">
-              Iscriviti
-            </Button>
-          </div>
-        </section>
       </main>
 
-      {/* 5. Unified Shared Footer */}
+      {/* Footer */}
       <Footer />
 
-      {/* 6. Sticky Bottom Menus & Overlays */}
+      {/* Mobile nav & overlays */}
       <MobileBottomNav
         activeTab={activeTab}
         onTabChange={(tab) => {
@@ -776,20 +585,14 @@ export default function Home() {
         onQuantityChange={handleQuantityChange}
       />
 
-      <Notification
-        toast={toast}
-        onClose={() => setToast(null)}
-      />
+      <Notification toast={toast} onClose={() => setToast(null)} />
 
       <SearchOverlay
         products={PRODUCTS}
-        onProductClick={(p) => {
-          router.push(`/prodotto/${getProductHandle(p)}`);
-        }}
+        onProductClick={(p) => router.push(`/prodotto/${getProductHandle(p)}`)}
         onAddToCart={(id) => handleQuantityChange(id, 1)}
-        onSearchSubmit={() => {}}
+        onSearchSubmit={(q) => router.push(`/reparto?q=${encodeURIComponent(q)}`)}
       />
-
     </div>
   );
 }

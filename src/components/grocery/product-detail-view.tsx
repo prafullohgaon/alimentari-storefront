@@ -29,6 +29,7 @@ import { CartDrawer } from "@/components/grocery/cart-drawer";
 import { SearchOverlay } from "@/components/grocery/search-overlay";
 import { Notification } from "@/components/grocery/notification";
 import { Footer } from "@/components/grocery/footer";
+import { ReviewSection } from "@/components/grocery/review-section";
 import { getProductHandle } from "@/lib/shopify";
 
 interface ProductDetailViewProps {
@@ -38,6 +39,16 @@ interface ProductDetailViewProps {
 import { useCartStore } from "@/store/cart";
 import { useUiStore } from "@/store/ui";
 import { useWishlistStore } from "@/store/wishlist";
+
+function getProductBrand(product: Product) {
+  if (product.name.toLowerCase().includes("pasta") || product.name.toLowerCase().includes("paccheri")) return "Pastificio Liguori";
+  if (product.name.toLowerCase().includes("olio")) return "Antico Frantoio";
+  if (product.name.toLowerCase().includes("parmigiano")) return "Consorzio Parmigiano";
+  if (product.name.toLowerCase().includes("mozzarella")) return "Caseificio Campano";
+  if (product.name.toLowerCase().includes("franciacorta") || product.name.toLowerCase().includes("vino")) return "Bellavista Enoteca";
+  if (product.name.toLowerCase().includes("prosciutto")) return "Salumificio Devodier";
+  return "Alimentari Selezione";
+}
 
 export function ProductDetailView({ product }: ProductDetailViewProps) {
   const router = useRouter();
@@ -62,9 +73,19 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
   // Fullscreen lightbox states
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
+  // Mobile swipe gesture
+  const touchStartX = React.useRef<number | null>(null);
+
   // Dynamic sticky mobile purchase bar triggers (Peak conversion detail!)
   const [showStickyMobileBar, setShowStickyMobileBar] = useState(false);
   const mainBuyButtonRef = React.useRef<HTMLDivElement>(null);
+
+  // Dynamic delivery date (computed once at render)
+  const deliveryDate = React.useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  }, []);
 
   React.useEffect(() => {
     const currentRef = mainBuyButtonRef.current;
@@ -151,6 +172,24 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
     setIsZooming(false);
   };
 
+  // Swipe gesture handlers (mobile gallery)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const delta = e.changedTouches[0].clientX - touchStartX.current;
+    if (Math.abs(delta) > 40) {
+      if (delta < 0) {
+        setActiveImageIndex((i) => (i + 1) % productGalleryImages.length);
+      } else {
+        setActiveImageIndex((i) => (i - 1 + productGalleryImages.length) % productGalleryImages.length);
+      }
+    }
+    touchStartX.current = null;
+  };
+
   // Centralized Wishlist Store Integration
   const wishlistIds = useWishlistStore((state) => state.ids);
   const toggleWishlistAction = useWishlistStore((state) => state.toggleWishlist);
@@ -172,9 +211,9 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
         onCategorySelect={() => router.push("/reparto")}
       />
 
-      <main className="flex-grow max-w-7xl w-full mx-auto px-4 md:px-6 py-6 md:py-8 space-y-12 select-text">
+      <main className="flex-grow max-w-7xl w-full mx-auto px-4 md:px-6 py-6 md:py-8 space-y-12 select-text text-foreground">
         {/* Breadcrumb Row */}
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-semibold">
+        <div className="flex items-center gap-1.5 text-xs text-muted font-semibold">
           <Link href="/" className="hover:text-primary transition-colors">Home</Link>
           <ChevronRight className="w-3 h-3 stroke-[2.5]" />
           <Link href="/reparto" className="hover:text-primary transition-colors">Reparto</Link>
@@ -188,15 +227,15 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
           {/* Column Left (Gallery Layout): 7 Columns */}
           <div className="lg:col-span-7 grid grid-cols-1 md:grid-cols-12 gap-4">
             
-            {/* Thumbnail grid (Left 2 Units on Desktops) */}
+            {/* Thumbnail grid */}
             <div className="hidden md:flex md:col-span-2 flex-col gap-3 select-none">
               {productGalleryImages.map((img, idx) => (
                 <div
                   key={idx}
                   onClick={() => setActiveImageIndex(idx)}
                   className={cn(
-                    "aspect-square rounded-xl overflow-hidden border border-border cursor-pointer transition-all bg-white relative",
-                    activeImageIndex === idx ? "border-[#1C3B2B] ring-2 ring-[#1C3B2B]/10" : "hover:border-[#1C3B2B]/40"
+                    "aspect-square rounded-md overflow-hidden border cursor-pointer transition-all bg-card relative",
+                    activeImageIndex === idx ? "border-primary ring-2 ring-primary/10" : "border-border hover:border-primary/40"
                   )}
                 >
                   <Image
@@ -214,25 +253,26 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
               ))}
             </div>
 
-            {/* Main Image Showcase with Hover Magnifier details (Right 10 Units) */}
-            <div className="md:col-span-10 bg-card border border-border/80 rounded-2xl p-4 lg:p-6 shadow-soft flex items-center justify-center relative overflow-hidden select-none">
+            {/* Main Image Showcase with Hover Magnifier details */}
+            <div className="md:col-span-10 bg-card border border-border rounded-md p-4 lg:p-6 shadow-sm flex items-center justify-center relative overflow-hidden select-none">
               
               {product.isOrganic && (
                 <div className="absolute top-4 left-4 z-10">
-                  <Badge variant="success" className="bg-white/95 backdrop-blur-sm gap-1 py-1 px-3 shadow-sm font-bold text-[10px]">
-                    <Leaf className="w-3.5 h-3.5 text-success fill-success/10" />
-                    Bio Certificato
+                  <Badge className="bg-primary text-primary-foreground border-none py-1 px-3 shadow-sm font-bold text-[10px] rounded-sm">
+                    BIO CERTIFICATO
                   </Badge>
                 </div>
               )}
 
-              {/* Lens Magnifier Trigger boundaries */}
+              {/* Lens Magnifier Trigger + Touch Swipe handler */}
               <div
                 onMouseMove={handleMouseMove}
                 onMouseEnter={() => setIsZooming(true)}
                 onMouseLeave={handleMouseLeave}
                 onClick={() => setLightboxOpen(true)}
-                className="w-full relative aspect-square cursor-zoom-in overflow-hidden rounded-xl bg-white"
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                className="w-full relative aspect-square cursor-zoom-in overflow-hidden rounded-md bg-card border border-border"
               >
                 <Image
                   src={productGalleryImages[activeImageIndex]}
@@ -251,13 +291,13 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                 {isZooming && (
                   <div
                     style={zoomStyle}
-                    className="absolute inset-0 pointer-events-none rounded-xl border border-border bg-no-repeat shadow-elevation"
+                    className="absolute inset-0 pointer-events-none rounded-md border border-border bg-no-repeat shadow-md"
                   />
                 )}
               </div>
             </div>
 
-            {/* Mobile swipe category thumbnail dots */}
+            {/* Mobile swipe indicator dots */}
             <div className="flex md:hidden justify-center gap-1.5 py-1 w-full select-none">
               {productGalleryImages.map((_, idx) => (
                 <button
@@ -265,7 +305,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   onClick={() => setActiveImageIndex(idx)}
                   className={cn(
                     "w-2.5 h-2.5 rounded-full transition-all",
-                    activeImageIndex === idx ? "bg-[#1C3B2B] w-6" : "bg-border"
+                    activeImageIndex === idx ? "bg-primary w-6" : "bg-border"
                   )}
                   aria-label={`Slide ${idx}`}
                 />
@@ -274,77 +314,79 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
 
           </div>
 
-          {/* Column Right (Sticky Purchase & Descriptions): 5 Columns */}
+          {/* Column Right (Sticky Purchase & Descriptions) */}
           <div className="lg:col-span-5 lg:sticky lg:top-24 space-y-6">
             
             {/* Product Title Header card */}
-            <div className="bg-card border border-border/80 rounded-2xl p-5 md:p-6 shadow-soft space-y-4">
+            <div className="bg-card border border-border rounded-md p-5 md:p-6 shadow-sm space-y-4">
               <div className="space-y-1.5">
-                <span className="text-[10px] font-bold text-[#C9623B] uppercase tracking-widest block">
-                  {product.category}
+                <span className="text-[10px] font-bold text-muted uppercase tracking-widest block">
+                  {product.brand || getProductBrand(product)}
                 </span>
-                <h1 className="font-serif text-2xl md:text-3xl font-bold tracking-tight text-foreground leading-tight">
+                <h1 className="font-sans text-2xl md:text-3xl font-extrabold tracking-tight text-foreground leading-tight">
                   {product.name}
                 </h1>
-                {product.brand && (
-                  <span className="text-xs text-muted-foreground font-bold block">
-                    Marchio: <strong className="text-primary font-bold">{product.brand}</strong>
-                  </span>
+
+                {/* Stock urgency — only shown when stock < 15 */}
+                {product.stock !== undefined && product.stock < 15 && (
+                  <div className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded px-2.5 py-1.5 select-none">
+                    ⚡ Solo {product.stock} rimasti in magazzino
+                  </div>
                 )}
               </div>
 
               {/* Rating and details */}
-              <div className="flex items-center justify-between text-xs pt-2 border-t border-border/40 select-none">
-                <div className="flex items-center gap-1 font-semibold text-muted-foreground">
-                  <Star className="w-4 h-4 fill-warning text-warning" />
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-border select-none">
+                <div className="flex items-center gap-1 font-semibold text-muted font-sans">
+                  <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
                   <span className="font-bold text-foreground">{product.rating?.toFixed(1) || "4.9"}</span>
-                  <span>(38 recensioni positive)</span>
+                  <span>(38 recensioni)</span>
                 </div>
-                <span className="text-muted-foreground font-bold">SKU: {product.sku || "OL-COR-500"}</span>
+                <span className="text-muted font-bold">SKU: {product.sku || "OL-COR-500"}</span>
               </div>
             </div>
 
-            {/* HIGH-CONVERSION SUBSCRIBE & SAVE PANEL (Sticky Purchase Block) */}
-            <div className="bg-card border border-[#EFECE6] rounded-2xl p-5 md:p-6 shadow-premium space-y-6 select-none">
+            {/* SUBSCRIBE & SAVE PANEL */}
+            <div className="bg-card border border-border rounded-md p-5 md:p-6 shadow-sm space-y-6 select-none">
               
               {/* Pricing section */}
               <div className="flex items-baseline justify-between select-none">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-bold text-foreground tracking-tight">
+                  <span className="text-3xl font-extrabold text-foreground tracking-tight">
                     €{(purchaseType === "subscription" ? product.price * 0.95 : product.price).toFixed(2)}
                   </span>
                   {product.originalPrice && (
-                    <span className="text-base text-muted-foreground line-through font-semibold">
+                    <span className="text-base text-muted line-through font-semibold">
                       €{product.originalPrice.toFixed(2)}
                     </span>
                   )}
-                  <span className="text-xs text-muted-foreground font-semibold">/ {product.unit}</span>
+                  <span className="text-xs text-muted font-semibold">/ {product.unit}</span>
                 </div>
 
                 {purchaseType === "subscription" && (
-                  <Badge className="bg-success/15 text-success border border-success/20 font-bold text-[9px] px-2 py-0.5">
+                  <Badge className="bg-primary/10 text-primary border border-primary/20 font-bold text-[9px] px-2 py-0.5 rounded-sm">
                     Risparmi 5%
                   </Badge>
                 )}
               </div>
 
-              {/* Social proof & countdown conversion microcopy */}
-              <div className="text-[11px] font-medium text-muted-foreground bg-[#FAF7F2] border border-[#EFECE6] p-2.5 rounded-lg flex justify-between items-center select-none">
-                <span className="text-primary font-bold">🔥 Acquistato da 18 persone oggi</span>
-                <span>Consegna entro domani</span>
+              {/* Social proof bar — dynamic delivery date */}
+              <div className="text-[11px] font-medium bg-secondary border border-border p-2.5 rounded-md grid grid-cols-2 gap-2 select-none">
+                <span className="flex items-center gap-1 text-primary font-bold">🔥 18 persone oggi</span>
+                <span className="flex items-center gap-1 text-muted justify-end">🚚 Consegna {deliveryDate}</span>
               </div>
 
-              {/* Purchase Toggles (Shopify Headless integration selling plans simulator) */}
+              {/* Purchase Toggles */}
               <div className="space-y-3">
                 {/* One time */}
                 <div
                   onClick={() => setPurchaseType("one-time")}
                   className={cn(
-                    "border rounded-xl p-3 flex gap-3 items-center cursor-pointer hover:bg-muted/5 transition-all",
+                    "border rounded-md p-3 flex gap-3 items-center cursor-pointer hover:bg-secondary transition-all",
                     purchaseType === "one-time" ? "border-primary bg-primary/5" : "border-border"
                   )}
                 >
-                  <div className="w-4 h-4 rounded-full border border-border flex items-center justify-center relative">
+                  <div className="w-4 h-4 rounded-full border border-border flex items-center justify-center relative bg-card">
                     {purchaseType === "one-time" && (
                       <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                     )}
@@ -355,16 +397,16 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   </div>
                 </div>
 
-                {/* Subscription (Subscribe & Save) */}
+                {/* Subscription */}
                 <div
                   onClick={() => setPurchaseType("subscription")}
                   className={cn(
-                    "border rounded-xl p-3 flex flex-col gap-3 cursor-pointer hover:bg-muted/5 transition-all",
+                    "border rounded-md p-3 flex flex-col gap-3 cursor-pointer hover:bg-secondary transition-all",
                     purchaseType === "subscription" ? "border-primary bg-primary/5" : "border-border"
                   )}
                 >
                   <div className="flex gap-3 items-center">
-                    <div className="w-4 h-4 rounded-full border border-border flex items-center justify-center relative">
+                    <div className="w-4 h-4 rounded-full border border-border flex items-center justify-center relative bg-card">
                       {purchaseType === "subscription" && (
                         <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                       )}
@@ -373,13 +415,13 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                       <span className="flex items-center gap-1">
                         ↺ Spesa Ricorrente (Subscribe & Save)
                       </span>
-                      <span className="text-[#C9623B]">€{(product.price * 0.95).toFixed(2)}</span>
+                      <span className="text-accent">€{(product.price * 0.95).toFixed(2)}</span>
                     </div>
                   </div>
 
                   {purchaseType === "subscription" && (
-                    <div className="border-t border-border/60 pt-2.5 pl-7 flex items-center justify-between gap-4">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase">Frequenza Spesa</span>
+                    <div className="border-t border-border pt-2.5 pl-7 flex items-center justify-between gap-4">
+                      <span className="text-[10px] font-bold text-muted uppercase">Frequenza Spesa</span>
                       <select
                         value={subInterval}
                         onChange={(e) => setSubInterval(e.target.value as "weekly" | "biweekly" | "monthly")}
@@ -397,7 +439,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
               {/* Add to Cart Actions */}
               <div ref={mainBuyButtonRef} className="flex gap-3 select-none">
                 {quantityInCart === 0 ? (
-                  <Button
+                  <button
                     onClick={() => {
                       if (purchaseType === "subscription") {
                         try {
@@ -410,15 +452,14 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                       }
                       handleQuantityChange(product.id, 1);
                     }}
-                    variant="primary"
-                    className="flex-grow h-12 text-sm font-bold shadow-soft flex items-center justify-center gap-1.5"
+                    className="flex-grow h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-sm rounded-md shadow-sm flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <ShoppingBag className="w-4.5 h-4.5 stroke-[2.5]" />
                     {purchaseType === "subscription" ? "Abbonati Ora" : "Aggiungi alla Spesa"}
-                  </Button>
+                  </button>
                 ) : (
                   <div className="flex items-center gap-3 flex-grow">
-                    <span className="text-xs font-bold text-muted-foreground whitespace-nowrap">Q.tà:</span>
+                    <span className="text-xs font-bold text-muted whitespace-nowrap">Q.tà:</span>
                     <QuantitySelector
                       value={quantityInCart}
                       onChange={(qty) => handleQuantityChange(product.id, qty)}
@@ -427,23 +468,22 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   </div>
                 )}
                 
-                <Button
-                  variant="outline"
-                  className="h-12 w-12 p-0 flex items-center justify-center border-border hover:bg-muted/10 active:scale-95 transition-all flex-shrink-0"
+                <button
+                  className="h-12 w-12 p-0 flex items-center justify-center border border-border rounded-md hover:bg-secondary active:scale-95 transition-all flex-shrink-0 bg-card"
                   onClick={toggleWishlist}
                   aria-label="Aggiungi preferito"
                 >
                   <Heart
                     className={cn(
                       "w-5 h-5 stroke-[2]",
-                      isWishlisted ? "text-accent fill-accent" : "text-[#C9623B]"
+                      isWishlisted ? "text-red-500 fill-red-500" : "text-muted"
                     )}
                   />
-                </Button>
+                </button>
               </div>
 
-              {/* Quality Courier indicators */}
-              <div className="pt-3 border-t border-border/50 grid grid-cols-2 gap-3 text-[10px] font-semibold text-muted-foreground">
+              {/* Quality indicators */}
+              <div className="pt-3 border-t border-border grid grid-cols-2 gap-3 text-[10px] font-semibold text-muted">
                 <span className="flex items-center gap-1.5">
                   <Truck className="w-4.5 h-4.5 text-primary flex-shrink-0" />
                   Corriere Refrigerato
@@ -454,37 +494,37 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                 </span>
               </div>
 
-              {/* Trust Indicators & Minimalist Payments Row (Italian grocery realism) */}
-              <div className="pt-4 border-t border-border/40 space-y-3 select-none">
-                <div className="flex flex-col gap-1.5 text-[11px] font-medium text-muted-foreground">
+              {/* Trust Indicators */}
+              <div className="pt-4 border-t border-border space-y-3 select-none">
+                <div className="flex flex-col gap-1.5 text-[11px] font-medium text-muted">
                   <div className="flex items-center gap-1.5">
                     <span className="text-primary font-bold">✓</span>
                     <span>Garantito Fresco: Scadenza minima 14 giorni</span>
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-primary font-bold">✓</span>
-                    <span>Spedizione Termica Gratuita da €50 in box refrigerati</span>
+                    <span>Spedizione Termica Gratuita da €80 in box refrigerati</span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/20">
-                  <span className="text-[9px] font-bold text-muted-foreground/60 uppercase tracking-widest">Pagamenti Protetti SSL</span>
-                  <div className="flex items-center gap-1.5 text-muted-foreground/60 select-none">
-                    <span className="text-[9px] font-bold border border-border/60 px-1.5 py-0.5 rounded select-none uppercase tracking-wider font-mono bg-white">Visa</span>
-                    <span className="text-[9px] font-bold border border-border/60 px-1.5 py-0.5 rounded select-none uppercase tracking-wider font-mono bg-white">MC</span>
-                    <span className="text-[9px] font-bold border border-border/60 px-1.5 py-0.5 rounded select-none uppercase tracking-wider font-mono bg-white">Amex</span>
-                    <span className="text-[9px] font-bold border border-border/60 px-1.5 py-0.5 rounded select-none uppercase tracking-wider font-mono bg-white">Apple Pay</span>
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
+                  <span className="text-[9px] font-bold text-muted uppercase tracking-widest">Pagamenti Protetti SSL</span>
+                  <div className="flex items-center gap-1.5 text-muted select-none">
+                    <span className="text-[9px] font-bold border border-border px-1.5 py-0.5 rounded select-none uppercase tracking-wider font-mono bg-card">Visa</span>
+                    <span className="text-[9px] font-bold border border-border px-1.5 py-0.5 rounded select-none uppercase tracking-wider font-mono bg-card">MC</span>
+                    <span className="text-[9px] font-bold border border-border px-1.5 py-0.5 rounded select-none uppercase tracking-wider font-mono bg-card">Amex</span>
+                    <span className="text-[9px] font-bold border border-border px-1.5 py-0.5 rounded select-none uppercase tracking-wider font-mono bg-card">Apple Pay</span>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Visual DOP Certification badge card */}
-            <div className="border border-primary/20 bg-primary/5 rounded-2xl p-4 flex gap-3.5 items-start">
+            {/* Quality DOP Certification card */}
+            <div className="border border-primary/20 bg-primary/5 rounded-md p-4 flex gap-3.5 items-start">
               <Award className="w-6 h-6 text-primary flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="font-serif font-bold text-sm text-[#1C3B2B]">Qualità Gastronomica Garantita</h4>
-                <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                <h4 className="font-sans font-bold text-sm text-foreground">Qualità Gastronomica Garantita</h4>
+                <p className="text-xs text-muted mt-0.5 leading-relaxed">
                   Ogni prodotto Alimentari è selezionato presso piccoli frantoi, caseifici o pastifici locali certificati DOP/IGP.
                 </p>
               </div>
@@ -494,7 +534,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
         </section>
 
         {/* SECTION 2: Dynamic tabbed description grid */}
-        <section className="border-t border-border/80 pt-8 space-y-6">
+        <section className="border-t border-border pt-8 space-y-6">
           <div className="flex gap-2 border-b border-border select-none">
             {[
               { id: "storia" as const, label: "Storia & Origine" },
@@ -505,10 +545,10 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                 key={tab.id}
                 onClick={() => setActiveInfoTab(tab.id)}
                 className={cn(
-                  "px-4 py-2 font-serif text-sm font-bold border-b-2 transition-all",
+                  "px-4 py-2 font-sans text-sm font-bold border-b-2 transition-all",
                   activeInfoTab === tab.id
                     ? "border-primary text-primary"
-                    : "border-transparent text-muted-foreground hover:text-foreground"
+                    : "border-transparent text-muted hover:text-foreground"
                 )}
               >
                 {tab.label}
@@ -524,21 +564,21 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -5 }}
                 transition={{ duration: 0.15 }}
-                className="text-sm leading-relaxed text-muted-foreground space-y-4"
+                className="text-sm leading-relaxed text-muted space-y-4"
               >
                 {activeInfoTab === "storia" && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                     <div className="space-y-3">
-                      <h4 className="font-serif font-bold text-[#1C3B2B] text-base">La Tradizione di {product.brand || "Alimentari Artigiani"}</h4>
+                      <h4 className="font-sans font-bold text-foreground text-base">La Tradizione di {product.brand || "Alimentari Artigiani"}</h4>
                       <p>
                         Coltivato in **{product.origin || "Italia"}** seguendo antiche metodologie di rotazione biologica delle colture. Estratto, impastato o stagionato artigianalmente per preservare integre le proprietà organolettiche naturali.
                       </p>
                       {product.description && <p>{product.description}</p>}
                     </div>
-                    <div className="bg-muted/5 border border-border p-4 rounded-xl space-y-2.5">
+                    <div className="bg-secondary border border-border p-4 rounded-md space-y-2.5">
                       <h5 className="text-[10px] font-bold text-primary uppercase tracking-widest pl-0.5">Note di Filiera</h5>
                       <div className="flex gap-3 text-xs leading-normal">
-                        <Leaf className="w-5 h-5 text-success flex-shrink-0 mt-0.5" />
+                        <Leaf className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
                         <div>
                           <strong>Filiera Corta Garantita</strong> <br />
                           Il prodotto viaggia direttamente dal produttore alle nostre cantine di condizionamento senza passaggi intermedi.
@@ -553,7 +593,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                     {/* Ingredients list */}
                     <div className="space-y-4">
                       <div className="space-y-1">
-                        <h4 className="font-serif font-bold text-[#1C3B2B] text-base">Ingredienti e Tracciabilità</h4>
+                        <h4 className="font-sans font-bold text-foreground text-base">Ingredienti e Tracciabilità</h4>
                         <p className="italic text-foreground font-semibold">{product.ingredients || "100% Naturale senza aggiunta di conservanti artificiali."}</p>
                       </div>
                       <div className="space-y-1 text-xs">
@@ -565,21 +605,21 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                     {/* Nutritional values */}
                     {product.nutrition && product.nutrition.calories !== "N/A" && (
                       <div className="space-y-3">
-                        <h4 className="font-serif font-bold text-[#1C3B2B] text-base">Valori Nutrizionali Medi (per 100g)</h4>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 border border-border p-3.5 rounded-xl bg-[#FAF7F2] font-semibold text-xs text-muted-foreground">
-                          <div className="flex justify-between border-b border-border/40 pb-1">
+                        <h4 className="font-sans font-bold text-foreground text-base">Valori Nutrizionali Medi (per 100g)</h4>
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-2 border border-border p-3.5 rounded-md bg-secondary font-semibold text-xs text-muted">
+                          <div className="flex justify-between border-b border-border pb-1">
                             <span>Energia</span>
                             <span className="text-foreground font-bold">{product.nutrition.calories}</span>
                           </div>
-                          <div className="flex justify-between border-b border-border/40 pb-1">
+                          <div className="flex justify-between border-b border-border pb-1">
                             <span>Grassi</span>
                             <span className="text-foreground font-bold">{product.nutrition.fat}</span>
                           </div>
-                          <div className="flex justify-between border-b border-border/40 pb-1">
+                          <div className="flex justify-between border-b border-border pb-1">
                             <span>Carboidrati</span>
                             <span className="text-foreground font-bold">{product.nutrition.carbs}</span>
                           </div>
-                          <div className="flex justify-between border-b border-border/40 pb-1">
+                          <div className="flex justify-between border-b border-border pb-1">
                             <span>Proteine</span>
                             <span className="text-foreground font-bold">{product.nutrition.protein}</span>
                           </div>
@@ -595,25 +635,25 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
 
                 {activeInfoTab === "consegna" && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="border border-border p-4 rounded-xl space-y-2 bg-white">
+                    <div className="border border-border p-4 rounded-md space-y-2 bg-card">
                       <Truck className="w-6 h-6 text-primary stroke-[1.5]" />
-                      <h5 className="font-serif font-bold text-[#1c3b2b]">Catena del Freddo</h5>
+                      <h5 className="font-sans font-bold text-foreground">Catena del Freddo</h5>
                       <p className="text-xs">
                         I latticini, i salumi e i freschi viaggiano a temperatura controllata costante (+4°C) in furgoni refrigerati.
                       </p>
                     </div>
 
-                    <div className="border border-border p-4 rounded-xl space-y-2 bg-white">
+                    <div className="border border-border p-4 rounded-md space-y-2 bg-card">
                       <ShieldCheck className="w-6 h-6 text-primary stroke-[1.5]" />
-                      <h5 className="font-serif font-bold text-[#1c3b2b]">Imballaggio Eco-Termico</h5>
+                      <h5 className="font-sans font-bold text-foreground">Imballaggio Eco-Termico</h5>
                       <p className="text-xs">
                         Scatole termiche isolate 100% compostabili in fibra di cocco con gel refrigerante riutilizzabile.
                       </p>
                     </div>
 
-                    <div className="border border-border p-4 rounded-xl space-y-2 bg-white">
+                    <div className="border border-border p-4 rounded-md space-y-2 bg-card">
                       <Lock className="w-6 h-6 text-primary stroke-[1.5]" />
-                      <h5 className="font-serif font-bold text-[#1c3b2b]">Fatturazione e Resi</h5>
+                      <h5 className="font-sans font-bold text-foreground">Fatturazione e Resi</h5>
                       <p className="text-xs">
                         Ricevuta di acquisto e tracciabilità del lotto associate. Rimborso garantito in caso di difetti di freschezza.
                       </p>
@@ -625,30 +665,30 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
           </div>
         </section>
 
-        {/* SECTION 3: FREQUENTLY BOUGHT TOGETHER COMBO GRID (World-class conversion tool) */}
-        <section className="border-t border-border/80 pt-8 space-y-6 select-none bg-secondary/10 border rounded-2xl p-6 shadow-soft">
+        {/* SECTION 3: FREQUENTLY BOUGHT TOGETHER COMBO GRID */}
+        <section className="border-t border-border pt-8 space-y-6 select-none bg-card border border-border rounded-md p-6 shadow-sm">
           <div className="space-y-1">
-            <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight">
+            <h3 className="font-sans text-lg md:text-xl font-extrabold text-foreground">
               Spesso Acquistati Insieme (Combo Ricetta)
             </h3>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted font-semibold">
               Completa la ricetta con questi prodotti abbinati e ottieni uno sconto speciale dell&apos;8% sul totale!
             </p>
           </div>
 
-          <div className="flex flex-col lg:flex-row items-center gap-6 justify-between">
+          <div className="flex flex-col lg:flex-row items-center gap-6 justify-between animate-fadeIn">
             {/* Visual plus list flow */}
             <div className="flex flex-wrap items-center gap-3 md:gap-5 justify-center">
               
               {/* Item 1: Active Product */}
-              <div className="border border-border/80 rounded-xl p-3 bg-white flex gap-3 items-center max-w-[210px] shadow-sm">
+              <div className="border border-border rounded-md p-3 bg-card flex gap-3 items-center max-w-[210px] shadow-sm">
                 <div className="w-10 h-10 relative flex-shrink-0">
                   <Image
                     src={product.imageUrl}
                     alt={product.name}
                     fill
                     sizes="40px"
-                    className="object-cover rounded-lg border"
+                    className="object-cover rounded border"
                     onError={(e) => {
                       e.currentTarget.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
                       e.currentTarget.srcset = "";
@@ -656,22 +696,22 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   />
                 </div>
                 <div className="min-w-0">
-                  <h5 className="font-serif font-bold text-xs truncate text-foreground">{product.name}</h5>
-                  <span className="text-[10px] text-muted-foreground">€{product.price.toFixed(2)}</span>
+                  <h5 className="font-sans font-bold text-xs truncate text-foreground">{product.name}</h5>
+                  <span className="text-[10px] text-muted font-semibold">€{product.price.toFixed(2)}</span>
                 </div>
               </div>
 
-              <span className="text-lg font-bold text-muted-foreground">+</span>
+              <span className="text-lg font-bold text-slate-400 font-sans select-none">+</span>
 
               {/* Item 2: Bought Together 1 */}
-              <div className="border border-border/80 rounded-xl p-3 bg-white flex gap-3 items-center max-w-[210px] shadow-sm">
+              <div className="border border-border rounded-md p-3 bg-card flex gap-3 items-center max-w-[210px] shadow-sm">
                 <div className="w-10 h-10 relative flex-shrink-0">
                   <Image
                     src={boughtTogetherItem.imageUrl}
                     alt={boughtTogetherItem.name}
                     fill
                     sizes="40px"
-                    className="object-cover rounded-lg border"
+                    className="object-cover rounded border"
                     onError={(e) => {
                       e.currentTarget.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
                       e.currentTarget.srcset = "";
@@ -679,22 +719,22 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   />
                 </div>
                 <div className="min-w-0">
-                  <h5 className="font-serif font-bold text-xs truncate text-foreground">{boughtTogetherItem.name}</h5>
-                  <span className="text-[10px] text-muted-foreground">€{boughtTogetherItem.price.toFixed(2)}</span>
+                  <h5 className="font-sans font-bold text-xs truncate text-foreground">{boughtTogetherItem.name}</h5>
+                  <span className="text-[10px] text-muted font-semibold">€{boughtTogetherItem.price.toFixed(2)}</span>
                 </div>
               </div>
 
-              <span className="text-lg font-bold text-muted-foreground">+</span>
+              <span className="text-lg font-bold text-muted font-sans select-none">+</span>
 
               {/* Item 3: Bought Together 2 */}
-              <div className="border border-border/80 rounded-xl p-3 bg-white flex gap-3 items-center max-w-[210px] shadow-sm">
+              <div className="border border-border rounded-md p-3 bg-card flex gap-3 items-center max-w-[210px] shadow-sm">
                 <div className="w-10 h-10 relative flex-shrink-0">
                   <Image
                     src={boughtTogetherItem2.imageUrl}
                     alt={boughtTogetherItem2.name}
                     fill
                     sizes="40px"
-                    className="object-cover rounded-lg border"
+                    className="object-cover rounded border"
                     onError={(e) => {
                       e.currentTarget.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
                       e.currentTarget.srcset = "";
@@ -702,37 +742,39 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   />
                 </div>
                 <div className="min-w-0">
-                  <h5 className="font-serif font-bold text-xs truncate text-foreground">{boughtTogetherItem2.name}</h5>
-                  <span className="text-[10px] text-muted-foreground">€{boughtTogetherItem2.price.toFixed(2)}</span>
+                  <h5 className="font-sans font-bold text-xs truncate text-foreground">{boughtTogetherItem2.name}</h5>
+                  <span className="text-[10px] text-muted font-semibold">€{boughtTogetherItem2.price.toFixed(2)}</span>
                 </div>
               </div>
 
             </div>
 
             {/* Total price & CTA button */}
-            <div className="border-t lg:border-t-0 lg:border-l border-border/80 pt-4 lg:pt-0 lg:pl-6 flex flex-col items-center lg:items-end justify-center gap-3 flex-shrink-0">
+            <div className="border-t lg:border-t-0 lg:border-l border-border pt-4 lg:pt-0 lg:pl-6 flex flex-col items-center lg:items-end justify-center gap-3 flex-shrink-0">
               <div className="text-center lg:text-right">
-                <span className="text-xs text-muted-foreground font-semibold block">Prezzo del Pacchetto Combo</span>
+                <span className="text-xs text-muted font-semibold block">Prezzo del Pacchetto Combo</span>
                 <div className="flex items-baseline gap-2 mt-0.5 justify-center lg:justify-end">
-                  <span className="text-2xl font-bold text-primary">€{discountedComboPrice.toFixed(2)}</span>
-                  <span className="text-xs text-muted-foreground line-through">€{comboPrice.toFixed(2)}</span>
+                  <span className="text-2xl font-extrabold text-primary">€{discountedComboPrice.toFixed(2)}</span>
+                  <span className="text-xs text-muted line-through">€{comboPrice.toFixed(2)}</span>
                 </div>
               </div>
-              <Button
+              <button
                 onClick={handleAddComboToCart}
-                variant="accent"
-                className="font-bold text-xs h-10 shadow-soft"
+                className="h-10 px-6 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs rounded-md shadow-sm active:scale-95 transition-all"
               >
                 Aggiungi Combo al Carrello
-              </Button>
+              </button>
             </div>
           </div>
         </section>
 
-        {/* SECTION 4: RELATED PRODUCTS CAROUSEL GRID */}
+        {/* SECTION 4: CUSTOMER REVIEWS */}
+        <ReviewSection productId={product.id} productName={product.name} />
+
+        {/* SECTION 5: RELATED PRODUCTS CAROUSEL GRID */}
         {relatedProducts.length > 0 && (
-          <section className="space-y-6 pt-6 select-none">
-            <h3 className="font-serif text-xl md:text-2xl font-bold tracking-tight">
+          <section className="space-y-4 pt-6 select-none">
+            <h3 className="font-sans text-lg md:text-xl font-extrabold text-foreground tracking-tight">
               Prodotti Consigliati dello Stesso Reparto
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
@@ -759,7 +801,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
       {/* FOOTER PILLARS */}
       <Footer />
 
-      {/* STICKY BOTTOM SHOPPING BAR ON MOBILE DEVICES (Peak conversion detail!) */}
+      {/* STICKY BOTTOM SHOPPING BAR ON MOBILE DEVICES */}
       <AnimatePresence>
         {showStickyMobileBar && (
           <motion.div
@@ -767,30 +809,28 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "tween", duration: 0.3, ease: "easeOut" }}
-            className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#EFECE6]/60 p-3.5 pb-safe flex justify-between items-center shadow-lg select-none"
+            className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border p-3.5 pb-safe flex justify-between items-center shadow-lg select-none"
           >
             <div className="min-w-0">
-              <span className="text-[10px] font-bold text-muted-foreground truncate block max-w-[150px]">{product.name}</span>
-              <span className="font-bold text-[#1C3B2B] text-base block mt-0.5">
+              <span className="text-[10px] font-bold text-muted truncate block max-w-[150px]">{product.name}</span>
+              <span className="font-bold text-foreground text-base block mt-0.5">
                 €{(purchaseType === "subscription" ? product.price * 0.95 : product.price).toFixed(2)}
               </span>
             </div>
 
             {quantityInCart === 0 ? (
-              <Button
+              <button
                 onClick={() => handleQuantityChange(product.id, 1)}
-                variant="primary"
-                size="sm"
-                className="font-bold text-xs h-10 shadow-soft"
+                className="h-10 px-5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs rounded-md shadow-sm active:scale-95 transition-all"
               >
                 + Aggiungi
-              </Button>
+              </button>
             ) : (
               <QuantitySelector
                 value={quantityInCart}
                 onChange={(qty) => handleQuantityChange(product.id, qty)}
                 size="sm"
-                className="w-28"
+                className="w-28 h-10"
               />
             )}
           </motion.div>
@@ -805,7 +845,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setLightboxOpen(false)}
-            className="fixed inset-0 z-[110] bg-espresso/95 backdrop-blur-sm cursor-zoom-out flex items-center justify-center p-4"
+            className="fixed inset-0 z-[110] bg-slate-950/95 backdrop-blur-sm cursor-zoom-out flex items-center justify-center p-4"
           >
             <motion.div
               initial={{ scale: 0.95 }}
@@ -820,7 +860,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   alt="Product closeup preview"
                   fill
                   sizes="(max-width: 1024px) 90vw, 800px"
-                  className="object-contain rounded-xl shadow-2xl"
+                  className="object-contain rounded shadow-2xl"
                   onError={(e) => {
                     e.currentTarget.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
                     e.currentTarget.srcset = "";

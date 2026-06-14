@@ -2,7 +2,7 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 
-const targetDir = 'C:/Users/ronan/.gemini/antigravity-ide/brain/af2d4199-4ae2-4dca-83d1-9f51d7f43269/screenshots';
+const targetDir = 'C:/Users/ronan/.gemini/antigravity-ide/brain/12edc420-cb4b-4196-b572-cd502db7c0e6/screenshots';
 if (!fs.existsSync(targetDir)) {
   fs.mkdirSync(targetDir, { recursive: true });
 }

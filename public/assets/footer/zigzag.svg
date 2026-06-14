@@ -1,0 +1,4 @@
+// public/assets/footer/zigzag.svg
+<svg width="100%" height="20" viewBox="0 0 100 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 10 L5 0 L10 10 L15 0 L20 10 L25 0 L30 10 L35 0 L40 10 L45 0 L50 10 L55 0 L60 10 L65 0 L70 10 L75 0 L80 10 L85 0 L90 10 L95 0 L100 10" stroke="#10B981" stroke-width="2" fill="none"/>
+</svg>

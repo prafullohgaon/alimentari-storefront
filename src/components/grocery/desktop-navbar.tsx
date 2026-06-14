@@ -1,3 +1,4 @@
+// src/components/grocery/desktop-navbar.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
@@ -6,10 +7,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, Heart, ShoppingBag, User, MapPin, Truck, HelpCircle, Phone, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MegaMenu } from "@/components/grocery/mega-menu";
-
 import { useCartStore, selectCartCount } from "@/store/cart";
 import { useUiStore } from "@/store/ui";
 import { useTranslation } from "@/hooks/use-translation";
+import { NAV_MENU } from "@/lib/navigation";
 
 interface DesktopNavbarProps {
   onCategorySelect: (catId: string) => void;
@@ -28,7 +29,7 @@ export function DesktopNavbar({
   const onSearchClick = useUiStore((state) => state.openSearch);
 
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isMegaOpen, setIsMegaOpen] = useState(false);
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
   const [pulseCount, setPulseCount] = useState(0);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -49,18 +50,13 @@ export function DesktopNavbar({
   }, [cartCount]);
 
   // Debounced open/close to bridge mouse movement gap between trigger and panel
-  const openMenu = useCallback(() => {
+  const scheduleClose = useCallback(() => {
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current);
-      closeTimerRef.current = null;
     }
-    setIsMegaOpen(true);
-  }, []);
-
-  const scheduleClose = useCallback(() => {
     closeTimerRef.current = setTimeout(() => {
-      setIsMegaOpen(false);
-    }, 120);
+      setActiveCategoryId(null);
+    }, 170);
   }, []);
 
   const cancelClose = useCallback(() => {
@@ -85,11 +81,11 @@ export function DesktopNavbar({
     }
   };
 
+  // Determine active category data
+  const activeCategory = activeCategoryId ? NAV_MENU[activeCategoryId] : null;
+
   return (
-    <header
-      className="hidden md:block sticky top-0 z-40 select-none w-full"
-      onMouseLeave={scheduleClose}
-    >
+    <header className="hidden md:block sticky top-0 relative z-40 select-none w-full">
       {/* Upper Utility Header (Hides on scroll) */}
       <AnimatePresence>
         {!isScrolled && (
@@ -97,33 +93,32 @@ export function DesktopNavbar({
             initial={{ height: 40, opacity: 1 }}
             animate={{ height: 40, opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="bg-[#FAF7F2] border-b border-[#EFECE6]/40 text-xs text-muted-foreground font-semibold flex items-center overflow-hidden"
+            className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-semibold flex items-center overflow-hidden"
           >
             <div className="max-w-7xl mx-auto w-full px-6 flex items-center justify-between">
               <div className="flex items-center gap-5">
                 <span className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-[#1C3B2B]" /> Milano (CAP 20121)
+                  <MapPin className="w-3.5 h-3.5 text-green-600" /> Milano (CAP 20121)
                 </span>
-                <span className="flex items-center gap-1 text-[#1C3B2B]">
-                  <Truck className="w-3.5 h-3.5" /> Spedizione gratuita da €50
+                <span className="flex items-center gap-1 text-green-600">
+                  <Truck className="w-3.5 h-3.5" /> Spedizione gratuita da €80
                 </span>
               </div>
               <div className="flex items-center gap-6">
-                <a href="/reparto" className="hover:text-[#1C3B2B] transition-colors">Chi Siamo</a>
-                <a href="/account" className="hover:text-[#1C3B2B] transition-colors flex items-center gap-1">
-                  <HelpCircle className="w-3 h-3" /> Assistenza
+                <a href="/reparto" className="hover:text-green-600 transition-colors">Chi Siamo</a>
+                <a href="/account" className="hover:text-green-600 transition-colors flex items-center gap-1">
+                  <HelpCircle className="w-3.5 h-3.5" /> Assistenza
                 </a>
-                <a href="tel:+3902123456" className="hover:text-[#1C3B2B] transition-colors flex items-center gap-1 font-bold text-[#181816]">
-                  <Phone className="w-3 h-3 text-[#1C3B2B]" /> +39 02 123 456
+                <a href="tel:+3902123456" className="hover:text-green-600 transition-colors flex items-center gap-1 font-bold text-slate-800">
+                  <Phone className="w-3.5 h-3.5 text-green-600" /> +39 02 123 456
                 </a>
-
                 {/* Language Switcher */}
-                <div className="flex gap-1 border border-[#EFECE6] rounded p-0.5 bg-white select-none">
+                <div className="flex gap-1 border border-slate-200 rounded p-0.5 bg-white select-none">
                   <button
                     onClick={() => handleLanguageChange("it")}
                     className={cn(
                       "px-1.5 py-0.5 rounded text-[10px] font-extrabold transition-all",
-                      locale === "it" ? "bg-[#1C3B2B] text-white" : "text-muted-foreground"
+                      locale === "it" ? "bg-green-600 text-white" : "text-slate-400"
                     )}
                   >
                     IT
@@ -132,7 +127,7 @@ export function DesktopNavbar({
                     onClick={() => handleLanguageChange("en")}
                     className={cn(
                       "px-1.5 py-0.5 rounded text-[10px] font-extrabold transition-all",
-                      locale === "en" ? "bg-[#1C3B2B] text-white" : "text-muted-foreground"
+                      locale === "en" ? "bg-green-600 text-white" : "text-slate-400"
                     )}
                   >
                     EN
@@ -147,74 +142,53 @@ export function DesktopNavbar({
       {/* Main Desktop Navbar Row */}
       <div
         className={cn(
-          "w-full transition-all duration-300",
-          isScrolled
-            ? "bg-white/95 backdrop-blur-md border-b border-[#EFECE6]/70 shadow-md py-2"
-            : "bg-[#FAF7F2] border-b border-[#EFECE6]/30 py-4"
+          "w-full transition-all duration-300 bg-white border-b",
+          isScrolled ? "border-slate-200 shadow-sm py-2" : "border-slate-100 py-3.5"
         )}
       >
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between gap-6">
           {/* Logo Area */}
           <div
             onClick={() => router.push("/")}
-            className="flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-2 cursor-pointer flex-shrink-0"
           >
-            <div className="w-8 h-8 rounded-lg bg-[#1C3B2B] flex items-center justify-center text-white font-bold text-base shadow-sm">
+            <div className="w-8 h-8 rounded bg-green-600 flex items-center justify-center text-white font-bold text-base shadow-sm">
               A
             </div>
-            <span className="font-serif text-2xl font-bold tracking-tight text-[#181816]">
+            <span className="font-sans text-xl font-bold tracking-tight text-slate-900">
               Alimentari
             </span>
           </div>
 
-          {/* Navigation Links with Mega Menu Hook */}
-          <nav className="flex items-center gap-8 text-sm font-bold text-[#181816]">
-            <button
-              onMouseEnter={openMenu}
-              className={cn(
-                "hover:text-[#1C3B2B] transition-colors flex items-center gap-1 py-1.5",
-                isMegaOpen && "text-[#1C3B2B]"
-              )}
-            >
-              Dipartimenti
-              <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", isMegaOpen && "transform rotate-180")} />
-            </button>
-            <button onClick={() => onCategorySelect("dispensa")} className="hover:text-[#1C3B2B] transition-colors py-1.5">Dispensa</button>
-            <button onClick={() => onCategorySelect("latticini & salumi")} className="hover:text-[#1C3B2B] transition-colors py-1.5">Formaggi & Salumi</button>
-            <button onClick={() => onCategorySelect("enoteca")} className="hover:text-[#1C3B2B] transition-colors py-1.5">Enoteca</button>
-          </nav>
-
-          {/* Quick Search trigger area */}
+          {/* Quick Search trigger area - centered and expanded like Vico */}
           <div
             onClick={onSearchClick}
-            className="flex-1 max-w-xs bg-muted/10 border border-[#EFECE6]/80 rounded-xl h-11 px-4 flex items-center gap-3 cursor-pointer hover:border-[#1C3B2B]/60 transition-all select-none shadow-sm"
+            className="flex-1 max-w-xl bg-slate-50 border border-slate-200 rounded-md h-11 px-4 flex items-center justify-between cursor-pointer hover:border-green-600/60 transition-all select-none shadow-sm"
           >
-            <Search className="w-4.5 h-4.5 text-muted-foreground stroke-[2.5]" />
-            <span className="text-sm text-muted-foreground font-medium">Cerca specialità...</span>
+            <span className="text-sm text-slate-400 font-medium">Cerca specialità...</span>
+            <Search className="w-4.5 h-4.5 text-green-600 stroke-[2.5]" />
           </div>
 
           {/* Header Action Elements */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={() => router.push("/account")}
-              className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-muted/10 active:scale-95 text-[#181816] transition-all"
+              className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-slate-100 active:scale-95 text-slate-700 transition-all"
               aria-label="Profilo"
             >
-              <User className="w-5 h-5 stroke-[2]" />
+              <User className="w-5.5 h-5.5 stroke-[2]" />
             </button>
-
             <button
               onClick={() => router.push("/account?tab=wishlist")}
-              className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-muted/10 active:scale-95 text-[#181816] transition-all"
+              className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-slate-100 active:scale-95 text-slate-700 transition-all"
               aria-label="Preferiti"
             >
-              <Heart className="w-5 h-5 stroke-[2]" />
+              <Heart className="w-5.5 h-5.5 stroke-[2]" />
             </button>
-
             {/* Cart trigger button with spring-safe pulse badge */}
             <button
               onClick={onCartClick}
-              className="h-11 px-4 bg-[#1C3B2B] text-white hover:bg-[#1C3B2B]/95 font-semibold text-sm rounded-lg flex items-center gap-2 select-none shadow-sm transition-all active:scale-[0.98] btn-touch-active"
+              className="h-11 px-4 bg-green-600 text-white hover:bg-green-700 font-semibold text-sm rounded-md flex items-center gap-2 select-none shadow-sm transition-all active:scale-[0.98] btn-touch-active"
               aria-label="Carrello"
             >
               <ShoppingBag className="w-4.5 h-4.5 stroke-[2.5]" />
@@ -226,7 +200,7 @@ export function DesktopNavbar({
                   initial={{ scale: pulseCount > 0 ? 1.35 : 1 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 500, damping: 20 }}
-                  className="bg-white text-[#1C3B2B] text-xs font-bold px-2 py-0.5 rounded-full leading-none inline-block"
+                  className="bg-white text-green-600 text-xs font-bold px-2 py-0.5 rounded-full leading-none inline-block"
                 >
                   {cartCount}
                 </motion.span>
@@ -236,22 +210,100 @@ export function DesktopNavbar({
         </div>
       </div>
 
-      {/* Mega Menu Panel — rendered in the sticky header flow, bridged by debounced hover */}
+      {/* Sub-Navigation Row — dark green Vico style */}
+      <div className="w-full bg-[#1a3c2b] py-0 text-sm font-semibold text-white select-none">
+        <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
+          <nav className="flex items-center gap-1" onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
+            {/* Shop All placeholder kept for future */}
+            <button
+              onMouseEnter={() => setActiveCategoryId(null)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/90 hover:text-white hover:bg-white/10 rounded transition-all",
+                false && "bg-white/10 text-white"
+              )}
+            >
+              🛒 Shop All
+              <ChevronDown className={cn("w-3 h-3 transition-transform duration-200", false && "transform rotate-180")} />
+            </button>
+            {/* Top‑level categories */}
+            <button
+              onMouseEnter={() => { cancelClose(); setActiveCategoryId("dispensa"); }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/90 hover:text-white hover:bg-white/10 rounded transition-all",
+                activeCategoryId === "dispensa" && "bg-white/10 text-white"
+              )}
+            >
+              🍝 Dispensa
+            </button>
+            <button
+              onMouseEnter={() => { cancelClose(); setActiveCategoryId("latticini-salumi"); }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/90 hover:text-white hover:bg-white/10 rounded transition-all",
+                activeCategoryId === "latticini-salumi" && "bg-white/10 text-white"
+              )}
+            >
+              🧀 Formaggi & Salumi
+            </button>
+            <button
+              onMouseEnter={() => { cancelClose(); setActiveCategoryId("panetteria"); }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/90 hover:text-white hover:bg-white/10 rounded transition-all",
+                activeCategoryId === "panetteria" && "bg-white/10 text-white"
+              )}
+            >
+              🍞 Panetteria
+            </button>
+            <button
+              onMouseEnter={() => { cancelClose(); setActiveCategoryId("enoteca"); }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/90 hover:text-white hover:bg-white/10 rounded transition-all",
+                activeCategoryId === "enoteca" && "bg-white/10 text-white"
+              )}
+            >
+              🍷 Enoteca
+            </button>
+            <button
+              onMouseEnter={() => { cancelClose(); setActiveCategoryId("frutta-verdura"); }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/90 hover:text-white hover:bg-white/10 rounded transition-all",
+                activeCategoryId === "frutta-verdura" && "bg-white/10 text-white"
+              )}
+            >
+              🥦 Frutta & Verdura
+            </button>
+            <button
+              onMouseEnter={() => { cancelClose(); setActiveCategoryId("casa-persona"); }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2.5 text-[13px] font-semibold text-white/90 hover:text-white hover:bg-white/10 rounded transition-all",
+                activeCategoryId === "casa-persona" && "bg-white/10 text-white"
+              )}
+            >
+              🏠 Casa & Persona
+            </button>
+          </nav>
+          <div className="text-[12px] text-white/70 font-medium flex items-center gap-1.5 pr-1">
+            <Truck className="w-3.5 h-3.5 text-white/60" /> Spedizione gratis da 80€
+          </div>
+        </div>
+      </div>
+
+      {/* Mega Menu Panel – rendered only when a category with content is active */}
       <AnimatePresence>
-        {isMegaOpen && (
+        {activeCategory && activeCategory.columns.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            onMouseEnter={cancelClose}
-            onMouseLeave={scheduleClose}
-            className="w-full z-50 shadow-2xl"
-          >
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+          className="absolute top-full left-0 w-full z-50 shadow-lg"
+        >
             <MegaMenu
+              category={activeCategory}
               onCategorySelect={(catId) => {
                 onCategorySelect(catId);
-                setIsMegaOpen(false);
+                setActiveCategoryId(null);
               }}
             />
           </motion.div>

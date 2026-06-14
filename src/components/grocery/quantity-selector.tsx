@@ -38,7 +38,7 @@ export function QuantitySelector({
   return (
     <div
       className={cn(
-        "inline-flex items-center justify-between border border-border bg-card rounded-lg overflow-hidden select-none",
+        "inline-flex items-center justify-between border border-border bg-card rounded-md overflow-hidden select-none",
         {
           "h-8 px-1 gap-1.5": size === "sm",
           "h-11 px-1.5 gap-3": size === "md",
@@ -51,7 +51,7 @@ export function QuantitySelector({
         onClick={handleDecrement}
         disabled={value <= min}
         className={cn(
-          "flex items-center justify-center text-foreground hover:bg-muted/15 disabled:opacity-30 disabled:hover:bg-transparent rounded transition-colors",
+          "flex items-center justify-center text-foreground hover:bg-secondary disabled:opacity-30 disabled:hover:bg-transparent rounded transition-colors",
           {
             "w-6 h-6": size === "sm",
             "w-8 h-8": size === "md",
@@ -64,7 +64,7 @@ export function QuantitySelector({
 
       <span
         className={cn(
-          "font-semibold text-foreground text-center tabular-nums min-w-[1.25rem]",
+          "font-bold text-foreground text-center tabular-nums min-w-[1.25rem]",
           size === "sm" ? "text-sm" : "text-base"
         )}
       >
@@ -76,7 +76,7 @@ export function QuantitySelector({
         onClick={handleIncrement}
         disabled={value >= max}
         className={cn(
-          "flex items-center justify-center text-foreground hover:bg-muted/15 disabled:opacity-30 disabled:hover:bg-transparent rounded transition-colors",
+          "flex items-center justify-center text-foreground hover:bg-secondary disabled:opacity-30 disabled:hover:bg-transparent rounded transition-colors",
           {
             "w-6 h-6": size === "sm",
             "w-8 h-8": size === "md",

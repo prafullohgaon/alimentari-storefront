@@ -61,7 +61,50 @@ export const DICTIONARY = {
       shipping: "Spedizione",
       total: "Totale",
       secureCheckout: "Checkout Sicuro SSL",
-    }
+    },
+    mobileNavbar: {
+      openMenu: "Apri menu",
+      viewCart: "Vedi Carrello",
+      closeMenu: "Chiudi menu",
+      deliveryCap: "CAP di consegna",
+      deliveryLocation: "Milano (CAP 20121)",
+      myProfile: "Il Mio Profilo",
+      myFavorites: "I Miei Preferiti",
+      shoppingDepartments: "Dipartimenti Spesa",
+      allProducts: "Tutti i Prodotti Spesa",
+      callCustomerService: "Chiama Servizio Clienti"
+    },
+    desktopNavbar: {
+      aboutUs: "Chi Siamo",
+      assistance: "Assistenza",
+      freeShipping: "Spedizione gratuita da €80",
+      profileAria: "Profilo",
+      wishlistAria: "Preferiti",
+      cartAria: "Carrello",
+      cartLabel: "Spesa",
+      deliveryLocation: "Milano (CAP 20121)"
+    },
+    cartDrawer: {
+      title: "Carrello",
+      emptyCart: "Il tuo carrello è vuoto",
+      addItemsPrompt: "Aggiungi le nostre fresche specialità italiane per riempire la tua tavola.",
+      continueShopping: "Continua lo shopping",
+      freeShippingReached: "Spedizione Gratuita Raggiunta!",
+      freeShippingGoal: "Ti mancano €{amount} per la spedizione gratuita",
+      coldChain: "❄️ Catena del Freddo Garantita: i tuoi prodotti freschi viaggiano in box termici refrigerati per mantenere inalterata la qualità.",
+      vatInfo: "IVA inclusa. Spedizione calcolata al checkout. SSL Secure Connection.",
+      redirecting: "Reindirizzamento in corso...",
+      checkout: "Procedi al pagamento",
+    },
+    home: {
+      heroPetsTitle: "Prodotti Italiani per i tuoi Amici a 4 Zampe",
+      heroPetsButton: "Scopri la Selezione",
+      savingsTitle: "Risparmia ogni giorno",
+      savingsButton: "Vedi le Offerte",
+      tagline: "Prodotti italiani online ed emozioni in un unico servizio.",
+      environmentTitle: "Rispettosi dell'Ambiente",
+      freeShippingTitle: "Spedizione Gratuita"
+    },
   },
   en: {
     auth: {
@@ -123,6 +166,49 @@ export const DICTIONARY = {
       shipping: "Shipping",
       total: "Total",
       secureCheckout: "SSL Secure Checkout",
-    }
+    },
+    mobileNavbar: {
+      openMenu: "Open menu",
+      viewCart: "View Cart",
+      closeMenu: "Close menu",
+      deliveryCap: "Delivery ZIP",
+      deliveryLocation: "Milan (ZIP 20121)",
+      myProfile: "My Profile",
+      myFavorites: "My Favorites",
+      shoppingDepartments: "Shopping Departments",
+      allProducts: "All Shopping Products",
+      callCustomerService: "Call Customer Service",
+    },
+    desktopNavbar: {
+      aboutUs: "About Us",
+      assistance: "Assistance",
+      freeShipping: "Free shipping from €80",
+      profileAria: "Profile",
+      wishlistAria: "Favorites",
+      cartAria: "Cart",
+      cartLabel: "Cart",
+      deliveryLocation: "Milan (ZIP 20121)",
+    },
+    cartDrawer: {
+      title: "Cart",
+      emptyCart: "Your cart is empty",
+      addItemsPrompt: "Add our fresh Italian specialties to fill your table.",
+      continueShopping: "Continue shopping",
+      freeShippingReached: "Free Shipping Reached!",
+      freeShippingGoal: "You need €{amount} for free shipping",
+      coldChain: "❄️ Cold chain guaranteed: your fresh products travel in refrigerated boxes to keep quality.",
+      vatInfo: "VAT included. Shipping calculated at checkout. SSL Secure Connection.",
+      redirecting: "Redirecting...",
+      checkout: "Proceed to payment",
+    },
+    home: {
+      heroPetsTitle: "Italian Products for Your 4-Legged Friends",
+      heroPetsButton: "Discover the Selection",
+      savingsTitle: "Save Every Day",
+      savingsButton: "See Offers",
+      tagline: "Italian products online and emotions in one service.",
+      environmentTitle: "Environmentally Friendly",
+      freeShippingTitle: "Free Shipping"
+    },
   }
 };

@@ -15,7 +15,6 @@ export const useLocaleStore = create<LocaleState>()(
     }),
     {
       name: "alimentari_locale",
-      skipHydration: true,
     }
   )
 );

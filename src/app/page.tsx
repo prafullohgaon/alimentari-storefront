@@ -18,50 +18,12 @@ import { DesktopNavbar } from "@/components/grocery/desktop-navbar";
 import { MobileNavbar } from "@/components/grocery/mobile-navbar";
 import { SearchOverlay } from "@/components/grocery/search-overlay";
 import { Footer } from "@/components/grocery/footer";
+import { useTranslation } from "@/hooks/use-translation";
 
 import { useCartStore } from "@/store/cart";
 import { useUiStore } from "@/store/ui";
 
-// Single full-width hero slides (Vico style — compact, bright supermarket promotional)
-const HERO_SLIDES = [
-  {
-    badge: "PER I NOSTRI VICO LOVERS",
-    title: "Prodotti Italiani per i tuoi Amici a 4 Zampe",
-    subtitle: "Italian products online and emotions in one service. L'Italia a casa tua!",
-    bgColor: "#FFD1DC",
-    accentColor: "#1a3c2b",
-    textColor: "#1a1a1a",
-    btnText: "Scopri la Selezione",
-    btnBg: "#1a3c2b",
-    link: "/reparto?dept=dispensa",
-    imageUrl: "https://images.unsplash.com/photo-1607349913338-fca6f7fc42d0?q=80&w=900&auto=format&fit=crop",
-  },
-  {
-    badge: "SPEDIZIONE GRATUITA",
-    title: "Spesa Italiana Online",
-    subtitle: "Spedizione gratuita in tutta Europa da €49. Prodotti freschi a casa tua.",
-    bgColor: "#C8F7C5",
-    accentColor: "#1a3c2b",
-    textColor: "#1a1a1a",
-    btnText: "Inizia la Spesa",
-    btnBg: "#1a3c2b",
-    link: "/reparto",
-    imageUrl: "https://images.unsplash.com/photo-1610348725531-843dff563e2c?q=80&w=900&auto=format&fit=crop",
-  },
-  {
-    badge: "TUTTO SOTTO 2€",
-    title: "Risparmia ogni giorno",
-    subtitle: "Prodotti essenziali per la dispensa a prezzi bloccati, sempre freschi.",
-    bgColor: "#FFF9C4",
-    accentColor: "#f97316",
-    textColor: "#1a1a1a",
-    btnText: "Vedi le Offerte",
-    btnBg: "#f97316",
-    link: "/reparto",
-    imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?q=80&w=900&auto=format&fit=crop",
-  },
-];
-const HERO_COUNT = HERO_SLIDES.length;
+// HERO_SLIDES and HERO_COUNT moved inside Home component
 
 // Vico-style product shelf with horizontal slider + badge label
 function ProductShelf({
@@ -182,10 +144,50 @@ const CATEGORY_TILES = [
 export default function Home() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"shop" | "search" | "cart" | "account">("shop");
+  const { t } = useTranslation();
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [toast, setToast] = useState<{ id: string; product: Product } | null>(null);
 
   // Hero slider
+  const HERO_SLIDES = [
+    {
+      badge: "PER I NOSTRI VICO LOVERS",
+      title: t("home.heroPetsTitle"),
+      subtitle: "Italian products online and emotions in one service. L'Italia a casa tua!",
+      bgColor: "#FFD1DC",
+      accentColor: "#1a3c2b",
+      textColor: "#1a1a1a",
+      btnText: t("home.heroPetsButton"),
+      btnBg: "#1a3c2b",
+      link: "/reparto?dept=dispensa",
+      imageUrl: "https://images.unsplash.com/photo-1607349913338-fca6f7fc42d0?q=80&w=900&auto=format&fit=crop",
+    },
+    {
+      badge: "SPEDIZIONE GRATUITA",
+      title: "Spesa Italiana Online",
+      subtitle: "Spedizione gratuita in tutta Europa da €49. Prodotti freschi a casa tua.",
+      bgColor: "#C8F7C5",
+      accentColor: "#1a3c2b",
+      textColor: "#1a1a1a",
+      btnText: "Inizia la Spesa",
+      btnBg: "#1a3c2b",
+      link: "/reparto",
+      imageUrl: "https://images.unsplash.com/photo-1610348725531-843dff563e2c?q=80&w=900&auto=format&fit=crop",
+    },
+    {
+      badge: "TUTTO SOTTO 2€",
+      title: t("home.savingsTitle"),
+      subtitle: "Prodotti essenziali per la dispensa a prezzi bloccati, sempre freschi.",
+      bgColor: "#FFF9C4",
+      accentColor: "#f97316",
+      textColor: "#1a1a1a",
+      btnText: t("home.savingsButton"),
+      btnBg: "#f97316",
+      link: "/reparto",
+      imageUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?q=80&w=900&auto=format&fit=crop",
+    },
+  ];
+  const HERO_COUNT = HERO_SLIDES.length;
   const [heroIndex, setHeroIndex] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => setHeroIndex((prev) => (prev + 1) % HERO_COUNT), 6000);
@@ -340,7 +342,7 @@ export default function Home() {
         {/* SECTION 3: TAGLINE */}
         <section className="text-center max-w-2xl mx-auto space-y-1 select-none">
           <h2 className="font-sans text-lg md:text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
-            Prodotti italiani online ed emozioni in un unico servizio.
+            {t("home.tagline")}
           </h2>
           <p className="text-[12px] text-slate-400 font-semibold">
             L&apos;Italia a casa tua!{" "}
@@ -351,8 +353,8 @@ export default function Home() {
         {/* SECTION 4: FOUR SERVICE PILLARS */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 border-y border-slate-100 py-4 select-none">
           {[
-            { icon: <Leaf className="w-4 h-4 text-[#1a3c2b]" />, title: "Rispettosi dell'Ambiente", sub: "Packaging eco-compatibile" },
-            { icon: <Truck className="w-4 h-4 text-[#1a3c2b]" />, title: "Spedizione Gratuita", sub: "Da €49 in tutta Europa" },
+            { icon: <Leaf className="w-4 h-4 text-[#1a3c2b]" />, title: t("home.environmentTitle"), sub: "Packaging eco-compatibile" },
+            { icon: <Truck className="w-4 h-4 text-[#1a3c2b]" />, title: t("home.freeShippingTitle"), sub: "Da €49 in tutta Europa" },
             { icon: <Shield className="w-4 h-4 text-[#1a3c2b]" />, title: "Veloce e Sicuro", sub: "Consegna in 2-3 giorni" },
             { icon: <Sparkles className="w-4 h-4 text-[#1a3c2b]" />, title: "Made in Italy", sub: "100% prodotti autentici" },
           ].map(({ icon, title, sub }) => (

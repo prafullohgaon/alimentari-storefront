@@ -20,6 +20,7 @@ import { useCartStore, selectCartCount } from "@/store/cart";
 import { useUiStore } from "@/store/ui";
 
 import { useLocaleStore } from "@/store/locale";
+import { useTranslation } from "@/hooks/use-translation";
 
 interface MobileNavbarProps {
   onCategorySelect: (catId: string) => void;
@@ -56,6 +57,7 @@ export function MobileNavbar({
   onLocaleChange
 }: MobileNavbarProps) {
   const cartCount = useCartStore(selectCartCount);
+  const { t, locale: translationLocale, setLocale } = useTranslation();
   const onCartClick = useUiStore((state) => state.openCart);
   
   const isDrawerOpen = useUiStore((state) => state.mobileMenuOpen);
@@ -85,7 +87,7 @@ export function MobileNavbar({
     if (onLocaleChange) {
       onLocaleChange(lang);
     } else {
-      useLocaleStore.getState().setLocale(lang);
+      setLocale(lang);
     }
   };
 
@@ -99,7 +101,7 @@ export function MobileNavbar({
         <button
           onClick={toggleDrawer}
           className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-slate-100 active:scale-90 text-slate-800 transition-all btn-touch-active"
-          aria-label="Apri menu"
+          aria-label={t("ui.openMenu")}
         >
           <Menu className="w-6 h-6 stroke-[2]" />
         </button>
@@ -121,7 +123,7 @@ export function MobileNavbar({
         <button
           onClick={onCartClick}
           className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-slate-100 active:scale-95 text-slate-800 relative transition-all btn-touch-active"
-          aria-label="Vedi Carrello"
+          aria-label={t("ui.viewCart")}
         >
           <ShoppingBag className="w-5.5 h-5.5 stroke-[2]" />
           {cartCount > 0 && (
@@ -187,7 +189,7 @@ export function MobileNavbar({
                 <button
                   onClick={toggleDrawer}
                   className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 active:scale-90 text-slate-700 transition-all"
-                  aria-label="Chiudi menu"
+                  aria-label={t("ui.closeMenu")}
                 >
                   <X className="w-5 h-5 stroke-[2]" />
                 </button>
@@ -200,8 +202,8 @@ export function MobileNavbar({
                 <div className="flex gap-2.5 border border-slate-200 rounded-lg p-3 bg-white select-none shadow-sm">
                   <MapPin className="w-5 h-5 text-green-600 flex-shrink-0" />
                   <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">CAP di consegna</span>
-                    <span className="text-xs font-bold text-slate-800">Milano (CAP 20121)</span>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t("ui.deliveryCap")}</span>
+                    <span className="text-xs font-bold text-slate-800">{t("ui.deliveryLocation")}</span>
                   </div>
                 </div>
  
@@ -213,7 +215,7 @@ export function MobileNavbar({
                     className="border border-slate-200 bg-white rounded-lg p-3 flex flex-col gap-1 items-center text-center hover:border-green-600 transition-all shadow-sm"
                   >
                     <User className="w-5 h-5 text-green-600" />
-                    <span className="text-xs font-bold text-slate-800">Il Mio Profilo</span>
+                    <span className="text-xs font-bold text-slate-800">{t("ui.myProfile")}</span>
                   </a>
                   <a
                     href="/account"
@@ -221,15 +223,13 @@ export function MobileNavbar({
                     className="border border-slate-200 bg-white rounded-lg p-3 flex flex-col gap-1 items-center text-center hover:border-green-600 transition-all shadow-sm"
                   >
                     <Heart className="w-5 h-5 text-red-500" />
-                    <span className="text-xs font-bold text-slate-800">I Miei Preferiti</span>
+                    <span className="text-xs font-bold text-slate-800">{t("ui.myFavorites")}</span>
                   </a>
                 </div>
  
                 {/* Departments Header */}
                 <div className="space-y-2">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 select-none">
-                    Dipartimenti Spesa
-                  </h4>
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 select-none">{t("ui.shoppingDepartments")}</h4>
  
                   <div className="flex flex-col border border-slate-200 rounded-lg bg-white overflow-hidden shadow-sm">
                     {/* View all button */}
@@ -238,7 +238,7 @@ export function MobileNavbar({
                       className="w-full text-left h-12 px-4 text-sm font-bold hover:bg-slate-50 border-b border-slate-100 text-green-600 flex items-center gap-2 select-none"
                     >
                       <Sparkles className="w-4 h-4 text-green-600 animate-pulse" />
-                      Tutti i Prodotti Spesa
+                      {t("ui.allProducts")}
                     </button>
  
                     {/* Department accordion items */}
@@ -306,7 +306,7 @@ export function MobileNavbar({
                   className="h-11 bg-green-600 text-white hover:bg-green-700 font-semibold text-sm rounded-md flex items-center justify-center gap-2 shadow-sm transition-all"
                 >
                   <Phone className="w-4 h-4 text-white" />
-                  Chiama Servizio Clienti
+                  {t("ui.callCustomerService")}
                 </a>
               </div>
             </motion.div>

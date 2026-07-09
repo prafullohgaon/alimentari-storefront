@@ -22,17 +22,17 @@ export function Footer() {
   ];
 
   const paymentMethodsRow1 = [
-    { name: "VISA", url: "/assets/footer/visa.png" },
-    { name: "Mastercard", url: "/assets/footer/mastercard.png" },
-    { name: "PayPal", url: "/assets/footer/paypal.svg" },
-    { name: "ApplePay", url: "/assets/footer/apple-pay.svg" },
+    { name: "VISA",        url: "/assets/footer/visa.png" },
+    { name: "Mastercard",  url: "/assets/footer/mastercard.png" },
+    { name: "PayPal",      url: "/assets/footer/paypal.png" },
+    { name: "ApplePay",    url: "/assets/footer/apple-pay.png" },
   ];
 
   const paymentMethodsRow2 = [
-    { name: "GooglePay", url: "/assets/footer/google-pay.svg" },
-    { name: "SEPA", url: "/assets/footer/sepa.svg" },
-    { name: "Amex", url: "/assets/footer/amex.svg" },
-    { name: "Scalapay", url: "/assets/footer/scalapay.svg" },
+    { name: "GooglePay",   url: "/assets/footer/google-pay.png" },
+    { name: "SEPA",        url: "/assets/footer/sepa.png" },
+    { name: "Amex",        url: "/assets/footer/amex.png" },
+
   ];
 
   return (

@@ -2,25 +2,17 @@
 
 import React from "react";
 import Image from "next/image";
+
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { QuantitySelector } from "@/components/grocery/quantity-selector";
-import { Heart, Plus } from "lucide-react";
-
-export interface Product {
-  id: string;
-  name: string;
-  price: number;
-  unit: string;
-  imageUrl: string;
-  category: string;
-  rating?: number;
-  tags?: string[];
-  isOrganic?: boolean;
-  originalPrice?: number;
-}
-
+import { Heart, Plus, ListPlus } from "lucide-react";
+import { SaveToListModal } from "@/components/grocery/save-to-list-modal";
 import { useWishlistStore } from "@/store/wishlist";
+import { Product } from "@/lib/data";
+export type { Product };
+
+import { useTranslation } from "@/hooks/use-translation";
 
 interface ProductCardProps {
   product: Product;
@@ -29,147 +21,178 @@ interface ProductCardProps {
   onQuickView?: (product: Product) => void;
 }
 
-function getProductBrand(product: Product) {
-  if (product.name.toLowerCase().includes("pasta") || product.name.toLowerCase().includes("paccheri")) return "Pastificio Liguori";
-  if (product.name.toLowerCase().includes("olio")) return "Antico Frantoio";
-  if (product.name.toLowerCase().includes("parmigiano")) return "Consorzio Parmigiano";
-  if (product.name.toLowerCase().includes("mozzarella")) return "Caseificio Campano";
-  if (product.name.toLowerCase().includes("franciacorta") || product.name.toLowerCase().includes("vino")) return "Bellavista Enoteca";
-  if (product.name.toLowerCase().includes("prosciutto")) return "Salumificio Devodier";
-  return "Alimentari Selezione";
+function isDefaultVariantTitle(title?: string): boolean {
+  if (!title) return true;
+  const tStr = title.trim().toLowerCase();
+  return (
+    tStr === "default title" ||
+    tStr === "default" ||
+    tStr === "title" ||
+    tStr === "default title - 1" ||
+    tStr.startsWith("default title")
+  );
 }
 
-export function ProductCard({
+
+
+
+function ProductCardComponent({
   product,
   quantityInCart,
   onQuantityChange,
   onQuickView,
 }: ProductCardProps) {
-  const isSale = product.originalPrice && product.originalPrice > product.price;
-  const discountPercent = isSale
-    ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
-    : 0;
-
+  const { t } = useTranslation();
+  const [imgSrc, setImgSrc] = React.useState(product.imageUrl);
+  const [showSaveToList, setShowSaveToList] = React.useState(false);
   const wishlistIds = useWishlistStore((state) => state.ids);
   const toggleWishlistAction = useWishlistStore((state) => state.toggleWishlist);
-
-  const [hasMounted, setHasMounted] = React.useState(false);
-  const [imgSrc, setImgSrc] = React.useState(product.imageUrl);
-
-  React.useEffect(() => { setHasMounted(true); }, []);
-  React.useEffect(() => { setImgSrc(product.imageUrl); }, [product.imageUrl]);
-
   const isWishlisted = wishlistIds.includes(product.id);
+  const [hasMounted, setHasMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasMounted(true);
+  }, []);
 
   const toggleWishlist = (e: React.MouseEvent) => {
     e.stopPropagation();
     toggleWishlistAction(product.id);
   };
 
+  const isSale = product.originalPrice && product.originalPrice > product.price;
+  const discountPercent = isSale
+    ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
+    : 0;
+
+  const cleanUnit = product.unit && !isDefaultVariantTitle(product.unit) ? product.unit : undefined;
+
   return (
-    <div
-      className={cn(
-        "group relative flex flex-col bg-card rounded-md border border-border overflow-hidden",
-        "hover:border-primary/40 hover:shadow-sm transition-all duration-200"
-      )}
-    >
-      {/* Sale badge — top-left */}
-      <div className="absolute top-1.5 left-1.5 z-10 flex flex-col gap-0.5 pointer-events-none">
+    <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col h-full overflow-hidden select-none">
+      {/* Top Badges */}
+      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 pointer-events-none">
         {product.isOrganic && (
-          <Badge className="bg-primary text-primary-foreground border-none text-[8px] font-bold py-0 px-1 rounded-sm leading-4">
-            BIO
+          <Badge className="bg-emerald-700 text-white border-none text-[9px] font-extrabold py-0.5 px-2 rounded-md shadow-xs">
+            🌱 BIO
           </Badge>
         )}
         {isSale && (
-          <Badge className="bg-red-500 text-white border-none text-[8px] font-bold py-0 px-1 rounded-sm leading-4">
+          <Badge className="bg-rose-600 text-white border-none text-[9px] font-extrabold py-0.5 px-2 rounded-md shadow-xs">
             -{discountPercent}%
           </Badge>
         )}
       </div>
 
-      {/* Wishlist — top-right, small */}
-      <button
-        type="button"
-        onClick={toggleWishlist}
-        className="absolute top-1.5 right-1.5 z-20 w-6 h-6 rounded-full bg-card/90 flex items-center justify-center border border-border shadow-sm hover:scale-105 active:scale-95 transition-all duration-200"
-        aria-label="Aggiungi ai preferiti"
-        suppressHydrationWarning
-      >
-        <Heart
-          className={cn(
-            "w-3 h-3 transition-colors duration-200 stroke-[2.5]",
-            hasMounted && isWishlisted ? "text-red-500 fill-red-500" : "text-muted"
-          )}
-        />
-      </button>
+      {/* Save to list & Wishlist Action Overlays */}
+      <div className="absolute top-2 right-2 z-20 flex flex-col gap-1.5 opacity-90 group-hover:opacity-100 transition-opacity">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowSaveToList(true);
+          }}
+          className="w-7 h-7 rounded-full bg-white/90 flex items-center justify-center border border-slate-200 shadow-xs hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer min-h-[32px] min-w-[32px]"
+          aria-label={t("pdp.saveToList")}
+          title={t("pdp.saveToList")}
+        >
+          <ListPlus className="w-3.5 h-3.5 text-slate-600 stroke-[2.5]" />
+        </button>
 
-      {/* Image — reduced to 3:4 aspect, slightly rectangular like Vico */}
+        <button
+          type="button"
+          onClick={toggleWishlist}
+          className="w-7 h-7 rounded-full bg-white/90 flex items-center justify-center border border-slate-200 shadow-xs hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer min-h-[32px] min-w-[32px]"
+          aria-label={isWishlisted ? t("pdp.wishlistRemove") : t("pdp.wishlistAdd")}
+          suppressHydrationWarning
+        >
+          <Heart
+            className={cn(
+              "w-3.5 h-3.5 transition-colors duration-200 stroke-[2.5]",
+              hasMounted && isWishlisted ? "text-rose-500 fill-rose-500" : "text-slate-400"
+            )}
+          />
+        </button>
+      </div>
+
+      <SaveToListModal
+        product={product}
+        isOpen={showSaveToList}
+        onClose={() => setShowSaveToList(false)}
+      />
+
+      {/* Product Image Stage (Modest padding reduction for better density) */}
       <div
         onClick={() => onQuickView?.(product)}
-        className="relative w-full bg-secondary cursor-pointer overflow-hidden select-none"
-        style={{ aspectRatio: "1 / 1", maxHeight: "200px" }}
+        className="relative w-full bg-slate-50 cursor-pointer overflow-hidden select-none aspect-square"
       >
         <Image
           src={imgSrc}
           alt={product.name}
           fill
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 20vw, 16vw"
-          className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
+          className="object-contain p-2 transition-transform duration-300 group-hover:scale-105"
           onError={() => setImgSrc("https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop")}
           priority={product.id === "1" || product.id === "2"}
         />
-        {/* Minimal shipping tag */}
-        <span className="absolute bottom-1 left-1 bg-foreground/70 text-background text-[7px] font-bold py-0.5 px-1 rounded tracking-wide uppercase">
-          {product.category === "Latticini & Salumi" ? "Refrigerato" : "Standard"}
+
+        {/* Shipping badge */}
+        <span className="absolute bottom-1.5 left-2 bg-slate-900/80 backdrop-blur-xs text-white text-[8px] font-extrabold py-0.5 px-1.5 rounded-md tracking-wider uppercase">
+          {product.category === "Latticini & Salumi" ? "❄️ Refrigerato" : "📦 Standard"}
         </span>
       </div>
 
-      {/* Content — minimal padding, tight layout */}
-      <div className="flex flex-col p-1 bg-card select-none">
-        {/* Brand */}
-        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none mb-1 truncate">
-          {getProductBrand(product)}
-        </span>
+      {/* Card Body */}
+      <div className="flex flex-col p-3 bg-white select-none flex-grow justify-between">
+        <div>
+          {/* Brand */}
+          {product.brand && (
+            <span className="text-[10px] font-extrabold text-emerald-800 uppercase tracking-wider block truncate mb-1">
+              {product.brand}
+            </span>
+          )}
 
-        {/* Name */}
-        <h3
-          onClick={() => onQuickView?.(product)}
-          className="font-sans text-[14px] font-semibold text-foreground line-clamp-2 leading-tight cursor-pointer hover:text-primary transition-colors mb-0.5"
-          style={{ minHeight: "2rem" }}
-        >
-          {product.name}
-        </h3>
 
-        {/* Unit */}
-        <span className="text-[12px] text-muted font-medium leading-none mb-1">{product.unit}</span>
+          {/* Name */}
+          <h3
+            onClick={() => onQuickView?.(product)}
+            className="font-serif text-xs md:text-sm font-bold text-slate-900 line-clamp-2 leading-tight cursor-pointer hover:text-emerald-700 transition-colors mb-1 min-h-[2.25rem]"
+          >
+            {product.name}
+          </h3>
 
-        {/* Price row + add button on same row (Vico style) */}
-        <div className="flex items-center justify-between mt-1 gap-1">
-          <div className="flex items-baseline gap-1">
-            <span className="font-extrabold text-[16px] text-foreground leading-none">
+          {/* Genuine Variant Unit Label (Hidden if Default Title) */}
+          {cleanUnit && (
+            <span className="text-[11px] text-slate-500 font-semibold block mb-1.5">{cleanUnit}</span>
+          )}
+        </div>
+
+        {/* Price & Action Row */}
+        <div className="flex items-center justify-between gap-1 pt-2 border-t border-slate-100 mt-auto">
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className="font-extrabold text-base md:text-lg text-slate-900 tracking-tight">
               €{product.price.toFixed(2)}
             </span>
             {isSale && (
-              <span className="text-[10px] text-muted line-through font-medium">
+              <span className="text-[11px] text-slate-400 line-through font-semibold truncate">
                 €{product.originalPrice!.toFixed(2)}
               </span>
             )}
           </div>
 
-          {/* Vico-style: small square add button when qty=0, compact selector when qty>0 */}
+          {/* Add to Cart button / Quantity Selector */}
           {quantityInCart === 0 ? (
             <button
+              type="button"
               onClick={() => onQuantityChange(product.id, 1)}
-              className="w-8 h-8 bg-primary hover:bg-primary/90 text-primary-foreground rounded-md flex items-center justify-center flex-shrink-0 active:scale-95 transition-all shadow-sm"
-              aria-label="Aggiungi al carrello"
+              className="w-9 h-9 min-h-[36px] min-w-[36px] bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl flex items-center justify-center flex-shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer"
+              aria-label={t("pdp.addToCart")}
             >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <Plus className="w-4.5 h-4.5 stroke-[2.5]" />
             </button>
           ) : (
             <QuantitySelector
               value={quantityInCart}
               onChange={(qty) => onQuantityChange(product.id, qty)}
-              className="h-8 w-full max-w-[96px]"
+              className="h-9 w-full max-w-[100px]"
               size="sm"
             />
           )}
@@ -178,3 +201,13 @@ export function ProductCard({
     </div>
   );
 }
+
+export const ProductCard = React.memo(
+  ProductCardComponent,
+  (prevProps, nextProps) =>
+    prevProps.quantityInCart === nextProps.quantityInCart &&
+    prevProps.product.id === nextProps.product.id &&
+    prevProps.product.price === nextProps.product.price &&
+    prevProps.product.name === nextProps.product.name &&
+    prevProps.product.imageUrl === nextProps.product.imageUrl
+);

@@ -7,6 +7,7 @@ import Image from "next/image";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NavCategory } from "@/lib/navigation";
+import { useTranslation } from "@/hooks/use-translation";
 
 interface MegaMenuProps {
   category: NavCategory;
@@ -14,8 +15,11 @@ interface MegaMenuProps {
   className?: string;
 }
 
+
+
 export function MegaMenu({ category, onCategorySelect, className }: MegaMenuProps) {
   const router = useRouter();
+  const { t } = useTranslation();
 
   return (
     <div className={cn("w-full bg-white shadow-2xl border-t border-slate-100 overflow-hidden select-none", className)}>
@@ -29,12 +33,16 @@ export function MegaMenu({ category, onCategorySelect, className }: MegaMenuProp
               </h4>
               <ul className="space-y-2.5">
                 {col.links.map((link) => (
-                  <li key={link}>
+                  <li key={typeof link === "string" ? link : link.handle}>
                     <button
-                      onClick={() => onCategorySelect(category.id)}
+                      onClick={() => {
+                        const targetHandle = typeof link === "string" ? category.handle : link.handle;
+                        router.push(`/reparto?dept=${targetHandle}`);
+                        onCategorySelect(targetHandle);
+                      }}
                       className="text-[14px] text-slate-600 hover:text-emerald-700 transition-colors py-0.5 block text-left"
                     >
-                      {link}
+                      {typeof link === "string" ? link : link.name}
                     </button>
                   </li>
                 ))}
@@ -48,17 +56,20 @@ export function MegaMenu({ category, onCategorySelect, className }: MegaMenuProp
           <div className="relative group overflow-hidden rounded-lg aspect-[4/3] w-full">
             <Image
               src={category.promoImageUrl}
-              alt={`${category.name} promo`}
+              alt={t("megaMenu.promoAlt", { name: category.name })}
               fill
               className="object-cover transition-transform duration-700 group-hover:scale-105"
             />
             <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors" />
           </div>
           <button
-            onClick={() => onCategorySelect(category.id)}
+            onClick={() => {
+              router.push(`/reparto?dept=${category.handle}`);
+              onCategorySelect(category.handle);
+            }}
             className="text-sm font-bold text-emerald-700 flex items-center gap-2 group"
           >
-            Scopri tutti i prodotti
+            {t("megaMenu.discoverAll")}
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
@@ -68,9 +79,9 @@ export function MegaMenu({ category, onCategorySelect, className }: MegaMenuProp
         <div className="max-w-full mx-auto flex items-center justify-between text-[11px] uppercase font-bold text-slate-500 tracking-widest">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Spesa protetta e refrigerata</span>
+            <span>{t("megaMenu.protectedDelivery")}</span>
           </div>
-          <span>Supporto 24/7</span>
+          <span>{t("megaMenu.support247")}</span>
         </div>
       </div>
     </div>

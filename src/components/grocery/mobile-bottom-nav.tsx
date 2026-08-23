@@ -5,6 +5,7 @@ import { Store, Search, ShoppingCart, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { useCartStore, selectCartCount } from "@/store/cart";
+import { useTranslation } from "@/hooks/use-translation";
 
 interface MobileBottomNavProps {
   activeTab: "shop" | "search" | "cart" | "account";
@@ -15,13 +16,14 @@ export function MobileBottomNav({
   activeTab,
   onTabChange,
 }: MobileBottomNavProps) {
+  const { t } = useTranslation();
   const cartCount = useCartStore(selectCartCount);
 
   const navItems = [
-    { id: "shop" as const, label: "Spesa", icon: Store },
-    { id: "search" as const, label: "Cerca", icon: Search },
-    { id: "cart" as const, label: "Carrello", icon: ShoppingCart, badge: cartCount },
-    { id: "account" as const, label: "Profilo", icon: User },
+    { id: "shop" as const, label: t("nav.mobile.shop"), icon: Store },
+    { id: "search" as const, label: t("nav.mobile.search"), icon: Search },
+    { id: "cart" as const, label: t("nav.mobile.cart"), icon: ShoppingCart, badge: cartCount },
+    { id: "account" as const, label: t("nav.mobile.profile"), icon: User },
   ];
 
   return (

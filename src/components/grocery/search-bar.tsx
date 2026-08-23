@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Search, X, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/hooks/use-translation";
 
 interface SearchBarProps {
   onSearch: (query: string) => void;
@@ -19,6 +20,7 @@ const POPULAR_SUGGESTIONS = [
 ];
 
 export function SearchBar({ onSearch, className, placeholder = "Cerca specialit√† italiane..." }: SearchBarProps) {
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [isFocused, setIsFocused] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -69,7 +71,7 @@ export function SearchBar({ onSearch, className, placeholder = "Cerca specialit√
           <button
             onClick={handleClear}
             className="absolute right-4 w-6 h-6 flex items-center justify-center rounded-full hover:bg-muted/15 active:scale-90 text-muted-foreground transition-all"
-            aria-label="Cancella ricerca"
+            aria-label={t("searchOverlay.clearInputAria")}
           >
             <X className="w-3.5 h-3.5 stroke-[2.5]" />
           </button>

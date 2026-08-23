@@ -19,7 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Dynamic Product Pages resolved directly from the Shopify / Local database
   let dynamicProductEntries: MetadataRoute.Sitemap = [];
   try {
-    const products = await getProducts(50);
+    const products = (await getProducts(50)) || [];
     dynamicProductEntries = products.map((product) => {
       const handle = getProductHandle(product);
       return {

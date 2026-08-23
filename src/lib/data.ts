@@ -1,5 +1,24 @@
+export interface ProductVariant {
+  id: string;
+  title: string;
+  sku: string;
+  price: number;
+  originalPrice?: number;
+  stock: number;
+  available: boolean;
+  selectedOptions: { name: string; value: string }[];
+  image?: { url: string; altText?: string };
+}
+
+export interface ProductOption {
+  name: string;
+  values: string[];
+}
+
 export interface Product {
   id: string;
+  variantId?: string;
+  handle?: string;
   name: string;
   price: number;
   unit: string;
@@ -12,9 +31,11 @@ export interface Product {
   brand?: string;
   dietary?: "Gluten Free" | "Vegan" | "Senza Lattosio" | "Bio";
   stock?: number;
+  available?: boolean;
   sku?: string;
   origin?: string;
   description?: string;
+  descriptionHtml?: string;
   ingredients?: string;
   nutrition?: {
     calories: string;
@@ -23,60 +44,30 @@ export interface Product {
     protein: string;
     sodium: string;
   };
+  images?: { url: string; altText?: string }[];
+  variants?: ProductVariant[];
+  options?: ProductOption[];
 }
+
+import { sidebarData } from "@/data/sidebar";
 
 export interface Category {
   id: string;
   name: string;
+  handle: string;
   imageUrl: string;
   itemCount: number;
   subcategories: string[];
 }
 
-export const CATEGORIES: Category[] = [
-  {
-    id: "dispensa",
-    name: "La Dispensa",
-    imageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop",
-    itemCount: 42,
-    subcategories: ["Olio e Aceto", "Pasta e Riso", "Sughi e Conserve", "Spezie", "Caffè e Tè"],
-  },
-  {
-    id: "latticini & salumi",
-    name: "Latticini & Salumi",
-    imageUrl: "https://images.unsplash.com/photo-1486299267070-83823f5448dd?q=80&w=400&auto=format&fit=crop",
-    itemCount: 28,
-    subcategories: ["Formaggi DOP Stagionati", "Mozzarelle", "Salumi Affettati", "Burro e Panna"],
-  },
-  {
-    id: "panetteria",
-    name: "Panetteria Fresca",
-    imageUrl: "https://images.unsplash.com/photo-1608039829572-78524f79c4c7?q=80&w=400&auto=format&fit=crop",
-    itemCount: 14,
-    subcategories: ["Pane Caldo", "Focacce", "Grissini Artigianali", "Dolci da Colazione"],
-  },
-  {
-    id: "enoteca",
-    name: "Enoteca",
-    imageUrl: "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?q=80&w=400&auto=format&fit=crop",
-    itemCount: 36,
-    subcategories: ["Vini Rossi DOCG", "Vini Bianchi", "Bollicine Italiane", "Liquori e Amari"],
-  },
-  {
-    id: "frutta & verdura",
-    name: "Frutta & Verdura",
-    imageUrl: "https://images.unsplash.com/photo-1590502593747-42a996133562?q=80&w=400&auto=format&fit=crop",
-    itemCount: 22,
-    subcategories: ["Biologica Fresca", "In Stagione", "Insalate Pronte", "Frutta Secca"],
-  },
-  {
-    id: "casa & persona",
-    name: "Cura Casa & Persona",
-    imageUrl: "https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=400&auto=format&fit=crop",
-    itemCount: 19,
-    subcategories: ["Detersivi Eco", "Saponi Bio", "Accessori Casa"],
-  },
-];
+export const CATEGORIES: Category[] = sidebarData.sidebar.departments.map((dept) => ({
+  id: dept.id,
+  name: dept.name,
+  handle: dept.handle,
+  imageUrl: "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop",
+  itemCount: dept.isShopifyCount ? dept.count : 0,
+  subcategories: (dept.children || []).map((child) => child.name),
+}));
 
 export const PRODUCTS: Product[] = [
   {

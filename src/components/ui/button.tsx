@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/hooks/use-translation";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -12,6 +13,7 @@ export interface ButtonProps
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = "primary", size = "md", isLoading, children, disabled, ...props }, ref) => {
+    const { t } = useTranslation();
     return (
       <button
         ref={ref}
@@ -67,10 +69,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
               <path
                 className="opacity-75"
                 fill="currentColor"
-                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                d="M12 2a10 10 0 1 0 0 20a10 10 0 1 0 0-20"
               />
             </svg>
-            <span>Caricamento...</span>
+            <span>{t("common.loading")}</span>
           </span>
         ) : (
           children

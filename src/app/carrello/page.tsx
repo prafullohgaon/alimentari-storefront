@@ -13,7 +13,7 @@ import {
   Percent
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PRODUCTS, Product } from "@/lib/data";
+import { Product } from "@/lib/data";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -79,7 +79,7 @@ export default function CartPage() {
 
   const handleQuantityChange = (productId: string, qty: number) => {
     const existing = useCartStore.getState().items.find((item) => item.product.id === productId);
-    const productObj = PRODUCTS.find((p) => p.id === productId);
+    const productObj = existing?.product || saveForLater.find((i) => i.product.id === productId)?.product;
 
     if (!existing && qty === 1 && productObj) {
       setToast({ id: String(Date.now()), product: productObj });
@@ -132,23 +132,24 @@ export default function CartPage() {
 
 
   // Coupon trigger
-  const handleApplyCoupon = (e: React.FormEvent) => {
+  const handleApplyCoupon = async (e: React.FormEvent) => {
     e.preventDefault();
     setCouponError("");
     setCouponSuccess("");
 
-    const upperCode = couponCode.trim().toUpperCase();
-    if (upperCode === "ITALIA10" || upperCode === "ALIMENTARI") {
-      setAppliedDiscount(0.1);
-      setCouponSuccess(locale === "it" ? "Codice applicato! Sconto 10% attivo" : "Coupon applied! 10% discount active");
-      // Save coupon to localStorage for checkout inclusion later!
-      localStorage.setItem("alimentari_applied_discount", "0.1");
-      localStorage.setItem("alimentari_coupon_code", upperCode);
+    const code = couponCode.trim().toUpperCase();
+    if (!code) return;
+
+    const res = await useCartStore.getState().applyDiscountCode(code);
+    if (res.success) {
+      setAppliedDiscount(useCartStore.getState().appliedDiscount || 0.1);
+      setCouponSuccess(
+        locale === "it"
+          ? "Codice promozionale applicato al carrello!"
+          : "Promo code applied to cart!"
+      );
     } else {
-      setCouponError(locale === "it" ? "Codice promozionale non valido" : "Invalid promotional code");
-      setAppliedDiscount(0);
-      localStorage.removeItem("alimentari_applied_discount");
-      localStorage.removeItem("alimentari_coupon_code");
+      setCouponError(res.error || (locale === "it" ? "Codice promozionale non valido" : "Invalid promotional code"));
     }
   };
 
@@ -167,21 +168,38 @@ export default function CartPage() {
 
   const handleCheckout = async () => {
     setIsRedirecting(true);
+    const cartId = useCartStore.getState().cartId;
+    const checkoutUrlState = useCartStore.getState().checkoutUrl;
+
+    console.log("[REACT_CHECKOUT_CLICK] Triggered on /carrello page.");
+    console.log("[REACT_CHECKOUT_CLICK] cartId:", cartId);
+    console.log("[REACT_CHECKOUT_CLICK] checkoutUrlState from Zustand:", checkoutUrlState);
+
     try {
-      const { checkoutCart } = await import("@/lib/shopify");
       const { trackCheckoutStart } = await import("@/lib/analytics");
-      
-      // Track start checkout event in telemetry
       trackCheckoutStart(cart, subtotal - discountAmount);
-      
-      const checkoutUrl = await checkoutCart(cart);
-      window.location.href = checkoutUrl;
+
+      let targetUrl = checkoutUrlState;
+
+      if (!targetUrl || !targetUrl.startsWith("https://")) {
+        console.log("[REACT_CHECKOUT_CLICK] Generating checkout URL via checkoutCart()...");
+        const { checkoutCart } = await import("@/lib/shopify");
+        targetUrl = await checkoutCart(cartId, cart, locale);
+        console.log("[REACT_CHECKOUT_CLICK] checkoutCart() returned URL:", targetUrl);
+      }
+
+      if (targetUrl && targetUrl.startsWith("https://")) {
+        console.log("[REACT_CHECKOUT_CLICK] EXECUTING BROWSER REDIRECT TO:", targetUrl);
+        window.location.assign(targetUrl);
+      } else {
+        console.error("[REACT_CHECKOUT_CLICK] Invalid redirect URL generated:", targetUrl);
+        alert(locale === "it"
+          ? "Si è verificato un errore durante il reindirizzamento al checkout di Shopify."
+          : "An error occurred during Shopify checkout redirection.");
+        setIsRedirecting(false);
+      }
     } catch (error) {
-      console.error("Checkout redirection failed:", error);
-      alert(locale === "it" 
-        ? "Si è verificato un errore durante il reindirizzamento al checkout." 
-        : "An error occurred during checkout redirection.");
-    } finally {
+      console.error("[REACT_CHECKOUT_CLICK] Exception during checkout:", error);
       setIsRedirecting(false);
     }
   };
@@ -505,7 +523,7 @@ export default function CartPage() {
                     <span>{t.checkout.shipping}</span>
                     <span className="text-foreground">
                       {deliveryFee === 0 ? (
-                        <span className="text-success font-bold">Gratis</span>
+                        <span className="text-success font-bold">{t.cart.free}</span>
                       ) : (
                         `€${deliveryFee.toFixed(2)}`
                       )}
@@ -527,7 +545,7 @@ export default function CartPage() {
                   </label>
                   <div className="flex gap-2">
                     <Input
-                      placeholder="es. ITALIA10"
+                      placeholder={t.cart.couponPlaceholder}
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value)}
                       className="h-10 uppercase font-bold text-xs"

@@ -9,6 +9,7 @@ import { Product } from "@/components/grocery/product-card";
 import { QuantitySelector } from "@/components/grocery/quantity-selector";
 import { Badge } from "@/components/ui/badge";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { useTranslation } from "@/hooks/use-translation";
 
 interface ProductModalProps {
   product: Product | null;
@@ -25,6 +26,8 @@ export function ProductModal({
   quantityInCart,
   onQuantityChange,
 }: ProductModalProps) {
+  const { t } = useTranslation();
+
   // Prevent background scroll when modal is open
   React.useEffect(() => {
     if (isOpen) {
@@ -70,7 +73,7 @@ export function ProductModal({
             <button
               onClick={onClose}
               className="absolute right-4 top-4 z-20 md:hidden w-8 h-8 flex items-center justify-center rounded-full bg-white/80 backdrop-blur-sm border border-border/40 hover:bg-white text-foreground transition-all"
-              aria-label="Chiudi"
+              aria-label={t("productModal.closeAria")}
             >
               <X className="w-4 h-4 stroke-[2.5]" />
             </button>
@@ -93,7 +96,7 @@ export function ProductModal({
                 <div className="absolute top-4 left-4 z-10">
                   <Badge variant="success" className="gap-1 bg-white/95 backdrop-blur-sm shadow-sm py-1 px-2.5">
                     <Leaf className="w-3.5 h-3.5 text-success fill-success/10" />
-                    Biologico
+                    {t("pdp.organic")}
                   </Badge>
                 </div>
               )}
@@ -105,7 +108,7 @@ export function ProductModal({
               <button
                 onClick={onClose}
                 className="hidden md:flex absolute right-6 top-6 w-9 h-9 items-center justify-center rounded-full hover:bg-muted/10 text-muted-foreground transition-all active:scale-90"
-                aria-label="Chiudi dettagli"
+                aria-label={t("productModal.closeDetailsAria")}
               >
                 <X className="w-5 h-5 stroke-[2]" />
               </button>
@@ -119,7 +122,7 @@ export function ProductModal({
                     {product.name}
                   </h3>
                   <span className="text-sm font-semibold text-muted-foreground block mt-1.5">
-                    Confezione: {product.unit}
+                    {t("productModal.packagingUnit", { unit: product.unit ?? "" })}
                   </span>
                 </div>
 
@@ -137,10 +140,10 @@ export function ProductModal({
                 {/* Editorial Brand Narrative */}
                 <div className="pt-2 border-t border-border/80">
                   <h5 className="text-[11px] font-bold text-primary uppercase tracking-widest mb-1.5">
-                    Descrizione Prodotto
+                    {t("pdp.description")}
                   </h5>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Questa specialità gourmet incarna la vera tradizione gastronomica italiana. Selezionato da piccoli consorzi artigianali locali, garantisce un gusto autentico ed eccellenti valori nutrizionali, 100% biologico e privo di conservanti artificiali.
+                    {t("productModal.defaultDescription")}
                   </p>
                 </div>
 
@@ -148,18 +151,18 @@ export function ProductModal({
                 <div className="grid grid-cols-2 gap-3 pt-3">
                   <div className="flex items-center gap-2 border border-border/60 rounded-lg p-2.5 bg-muted/5">
                     <Leaf className="w-4 h-4 text-success flex-shrink-0" />
-                    <span className="text-xs font-semibold text-foreground">Artigianale DOP</span>
+                    <span className="text-xs font-semibold text-foreground">{t("productModal.badgeArtisanal")}</span>
                   </div>
                   <div className="flex items-center gap-2 border border-border/60 rounded-lg p-2.5 bg-muted/5">
                     <ShieldAlert className="w-4 h-4 text-primary flex-shrink-0" />
-                    <span className="text-xs font-semibold text-foreground">Senza Additivi</span>
+                    <span className="text-xs font-semibold text-foreground">{t("productModal.badgeNoAdditives")}</span>
                   </div>
                 </div>
 
                 {/* Tiny Freshness Assurances (Conversion trust) */}
                 <div className="flex flex-col gap-1 text-[10px] text-muted-foreground font-semibold pt-2 border-t border-border/40 select-none">
-                  <span className="flex items-center gap-1">✓ Scadenza minima 14 giorni garantita</span>
-                  <span className="flex items-center gap-1">✓ Consegna termica refrigerata</span>
+                  <span className="flex items-center gap-1">{t("productModal.shelfLifeNotice")}</span>
+                  <span className="flex items-center gap-1">{t("productModal.coldChainNotice")}</span>
                 </div>
               </div>
 
@@ -174,11 +177,11 @@ export function ProductModal({
                     )}
                   >
                     <ShoppingBag className="w-4.5 h-4.5 stroke-[2.5]" />
-                    Aggiungi alla Spesa
+                    {t("pdp.addToCart")}
                   </button>
                 ) : (
                   <div className="flex-grow flex items-center justify-between gap-4">
-                    <span className="text-sm font-semibold text-muted-foreground">Quantità nel carrello:</span>
+                    <span className="text-sm font-semibold text-muted-foreground">{t("productModal.quantityInCart")}</span>
                     <QuantitySelector
                       value={quantityInCart}
                       onChange={(qty) => onQuantityChange(product.id, qty)}

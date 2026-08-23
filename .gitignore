@@ -29,8 +29,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# env files (can opt-in for commiting if needed)
+# env files (secret files ignored, .env.example allowed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -38,3 +39,34 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local audit, QA, debug, & development scripts
+/scripts/
+/audit_*.js
+/audit_*.mjs
+/debug_*.js
+/debug_*.mjs
+/diagnose_*.js
+/diagnose_*.mjs
+/find_*.js
+/find_*.mjs
+/capture_*.js
+/investigate_*.js
+/investigate_*.mjs
+/run_full_visual_acceptance.js
+/test_*.js
+/test_*.mjs
+/verify_*.js
+/verify_*.mjs
+/controlled_test_results.json
+/tmp/
+/audit_screenshots/
+
+# Local screenshots / temporary HTML / archives / Excel artifacts
+*.png
+*.html
+*.zip
+*.xlsx
+
+# Local PDFs generated during investigation
+/src/lib/*.pdf

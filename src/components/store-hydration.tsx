@@ -16,11 +16,28 @@ export function StoreHydration() {
   const mobileMenuOpen = useUiStore((state) => state.mobileMenuOpen);
 
   useEffect(() => {
-    // Manually trigger rehydration for all persisted stores
-    useCartStore.persist.rehydrate();
+    // Manually trigger rehydration for persisted stores
     useWishlistStore.persist.rehydrate();
     useAuthStore.persist.rehydrate();
-    useLocaleStore.persist.rehydrate();
+    useLocaleStore.getState().initLocale();
+
+    // Sync active customer key to wishlist store
+    const profile = useAuthStore.getState().profile;
+    const customerKey = profile?.id || profile?.email || "guest";
+    useWishlistStore.getState().setCustomerKey(customerKey);
+
+    // Trigger Shopify active cart validation
+    useCartStore.getState().initCart();
+
+    // Sync multi-tab storage updates
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "alimentari_guest_cart") {
+        useCartStore.getState().initCart();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   useEffect(() => {

@@ -6,18 +6,21 @@ import { Shield, Mail, Lock, Eye, EyeOff, User, ArrowLeft, CheckCircle } from "l
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { customerLogin, customerRegister, customerRecover } from "@/lib/shopify";
+import { signIn, useSession } from "next-auth/react";
+import { customerRegister, customerRecover } from "@/lib/shopify";
 
 import { useAuthStore } from "@/store/auth";
 import { useTranslation } from "@/hooks/use-translation";
 
 export default function AuthPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const { locale, setLocale, dict: t } = useTranslation();
   const [view, setView] = useState<"login" | "register" | "forgot">("login");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false);
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [registerSuccessMsg, setRegisterSuccessMsg] = useState("");
 
   // Form Fields
   const [email, setEmail] = useState("");
@@ -27,40 +30,54 @@ export default function AuthPage() {
 
   // Auto redirect if already authenticated
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const activeToken = useAuthStore.getState().token;
-      if (activeToken) {
-        router.push("/account");
-      }
+    if (session || (typeof window !== "undefined" && useAuthStore.getState().token)) {
+      router.push("/account");
     }
-  }, [router]);
+  }, [session, router]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setRegisterSuccessMsg("");
     
     if (!email) {
-      setError(locale === "it" ? "Inserisci la tua email" : "Please enter your email");
+      setError(t.auth.errors.emailRequired);
       return;
     }
     if (view !== "forgot" && !password) {
-      setError(locale === "it" ? "Inserisci la tua password" : "Please enter your password");
+      setError(t.auth.errors.passwordRequired);
       return;
     }
 
     setIsLoading(true);
     try {
       if (view === "login") {
-        const { token: fetchedToken, error: loginErr } = await customerLogin(email, password);
-        if (loginErr) {
-          setError(loginErr);
-        } else if (fetchedToken) {
-          useAuthStore.getState().login(fetchedToken);
+        const res = await signIn("credentials", {
+          email,
+          password,
+          redirect: false,
+        });
+
+        if (res?.error) {
+          const isInvalid = res.error === "CredentialsSignin" || res.error.includes("Invalid") || res.error.includes("Unidentified");
+          setError(
+            isInvalid
+              ? t.auth.errors.invalidCredentials
+              : res.error
+          );
+        } else if (res?.ok) {
           router.push("/account");
+          router.refresh();
         } else {
-          setError(locale === "it" ? "Accesso non riuscito." : "Login failed.");
+          setError(t.auth.errors.loginFailed);
         }
       } else if (view === "register") {
+        if (!name.trim()) {
+          setError(t.auth.errors.fullNameRequired);
+          setIsLoading(false);
+          return;
+        }
+
         const nameParts = name.trim().split(" ");
         const firstName = nameParts[0] || "Cliente";
         const lastName = nameParts.slice(1).join(" ") || "Alimentari";
@@ -69,26 +86,37 @@ export default function AuthPage() {
         if (regErr) {
           setError(regErr);
         } else if (success) {
-          const { token: autoToken } = await customerLogin(email, password);
-          if (autoToken) {
-            useAuthStore.getState().login(autoToken);
-          }
-          setIsSuccess(true);
-          setTimeout(() => {
+          // Attempt automatic login
+          const res = await signIn("credentials", {
+            email,
+            password,
+            redirect: false,
+          });
+
+          if (res?.ok) {
             router.push("/account");
-          }, 1500);
+            router.refresh();
+          } else {
+            setView("login");
+            setRegisterSuccessMsg(t.auth.success.accountCreated);
+          }
         }
       } else if (view === "forgot") {
         const { success, error: recErr } = await customerRecover(email);
         if (recErr) {
-          setError(recErr);
+          const isUnidentified = recErr.includes("UNIDENTIFIED_CUSTOMER") || recErr.toLowerCase().includes("find");
+          setError(
+            isUnidentified
+              ? t.auth.errors.emailNotFound
+              : recErr
+          );
         } else if (success) {
-          setIsSuccess(true);
+          setForgotSuccess(true);
         }
       }
     } catch (err) {
       console.error(err);
-      setError(locale === "it" ? "Errore di connessione." : "Network connection error.");
+      setError(t.auth.errors.networkError);
     } finally {
       setIsLoading(false);
     }
@@ -130,48 +158,59 @@ export default function AuthPage() {
         <div className="bg-card border border-border/80 rounded-2xl p-6 md:p-8 w-full max-w-md shadow-premium relative overflow-hidden transition-all duration-300">
           
           {/* Back trigger */}
-          {view === "forgot" && (
+          {(view === "forgot" || view === "register") && (
             <button
-              onClick={() => { setView("login"); setIsSuccess(false); setError(""); }}
+              onClick={() => { setView("login"); setForgotSuccess(false); setError(""); setRegisterSuccessMsg(""); }}
               className="absolute left-6 top-6 flex items-center gap-1 text-xs font-bold text-muted-foreground hover:text-primary transition-colors"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
-              Indietro
+              {t.auth.back}
             </button>
           )}
 
           {/* Card Title */}
           <div className="text-center space-y-2 mb-6 pt-4">
             <h2 className="font-serif text-2xl md:text-3xl font-bold tracking-tight text-foreground">
-              {view === "login" && t.auth.login}
-              {view === "register" && t.auth.register}
-              {view === "forgot" && (locale === "it" ? "Ripristina Password" : "Reset Password")}
+              {view === "login" && <span>{t.auth.login}</span>}
+              {view === "register" && <span>{t.auth.register}</span>}
+              {view === "forgot" && <span>{t.auth.resetTitle}</span>}
             </h2>
             <p className="text-xs text-muted-foreground font-semibold">
-              {view === "login" && (locale === "it" ? "Accedi alle tue specialità preferite" : "Access your favorite specialties")}
-              {view === "register" && (locale === "it" ? "Crea un profilo in pochi secondi" : "Create a profile in seconds")}
-              {view === "forgot" && (locale === "it" ? "Inserisci la tua email per reimpostare la password" : "Enter your email to reset password")}
+              {view === "login" && <span>{t.auth.subtitles.login}</span>}
+              {view === "register" && <span>{t.auth.subtitles.register}</span>}
+              {view === "forgot" && <span>{t.auth.subtitles.forgot}</span>}
             </p>
           </div>
 
+          {/* Register Success Banner */}
+          {registerSuccessMsg && (
+            <div className="p-3 mb-4 bg-success/15 border border-success/30 text-success rounded-xl text-xs font-semibold flex items-center gap-2">
+              <CheckCircle className="w-4 h-4 shrink-0" />
+              <span>{registerSuccessMsg}</span>
+            </div>
+          )}
+
           {/* Success Reset layout */}
-          {isSuccess ? (
+          {forgotSuccess ? (
             <div className="space-y-6 text-center py-6 animate-fadeIn">
               <div className="w-12 h-12 rounded-full bg-success/15 text-success flex items-center justify-center mx-auto">
                 <CheckCircle className="w-6 h-6 stroke-[2.5]" />
               </div>
               <div className="space-y-2 select-text">
-                <h4 className="font-serif text-lg font-bold text-foreground">{t.auth.verifyEmail}</h4>
+                <h4 className="font-serif text-lg font-bold text-foreground">
+                  {t.auth.success.recoveryEmailSent}
+                </h4>
                 <p className="text-xs text-muted-foreground font-medium leading-relaxed">
-                  {t.auth.verificationSent} <strong className="text-foreground">{email}</strong>. Clicca sul link contenuto nell&apos;email per procedere.
+                  {t.auth.success.recoveryInstructions}{" "}
+                  <strong className="text-foreground">{email}</strong>. {t.auth.success.checkInbox}
                 </p>
               </div>
               <Button
                 variant="outline"
-                onClick={() => { setView("login"); setIsSuccess(false); }}
+                onClick={() => { setView("login"); setForgotSuccess(false); setError(""); }}
                 className="w-full h-11 font-bold text-xs"
               >
-                Accedi Ora
+                {t.auth.backToLogin}
               </Button>
             </div>
           ) : (
@@ -180,7 +219,7 @@ export default function AuthPage() {
               
               {/* Profile Name (Register view) */}
               {view === "register" && (
-                <div className="space-y-1.5">
+                <div key="register-name-field" className="space-y-1.5">
                   <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider pl-0.5">
                     {t.auth.fullName}
                   </label>
@@ -195,7 +234,7 @@ export default function AuthPage() {
               )}
 
               {/* Email Input */}
-              <div className="space-y-1.5">
+              <div key="email-field" className="space-y-1.5">
                 <label className="block text-xs font-bold text-muted-foreground uppercase tracking-wider pl-0.5">
                   {t.auth.email}
                 </label>
@@ -210,7 +249,7 @@ export default function AuthPage() {
 
               {/* Password Input (Excluded on forgot) */}
               {view !== "forgot" && (
-                <div className="space-y-1.5">
+                <div key={`password-field-${showPassword ? 'visible' : 'hidden'}`} className="space-y-1.5">
                   <div className="flex justify-between items-baseline pl-0.5">
                     <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                       {t.auth.password}
@@ -218,7 +257,7 @@ export default function AuthPage() {
                     {view === "login" && (
                       <button
                         type="button"
-                        onClick={() => { setView("forgot"); setError(""); }}
+                        onClick={() => { setView("forgot"); setError(""); setRegisterSuccessMsg(""); }}
                         className="text-[10px] font-bold text-primary hover:underline cursor-pointer"
                       >
                         {t.auth.forgotPassword}
@@ -239,7 +278,7 @@ export default function AuthPage() {
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/10 z-10"
-                      aria-label="Mostra password"
+                      aria-label={t.auth.togglePasswordAria}
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -273,7 +312,7 @@ export default function AuthPage() {
                     {t.auth.noAccount}{" "}
                     <button
                       type="button"
-                      onClick={() => { setView("register"); setError(""); }}
+                      onClick={() => { setView("register"); setError(""); setRegisterSuccessMsg(""); }}
                       className="text-primary font-bold hover:underline"
                     >
                       {t.auth.register}
@@ -285,7 +324,7 @@ export default function AuthPage() {
                     {t.auth.hasAccount}{" "}
                     <button
                       type="button"
-                      onClick={() => { setView("login"); setError(""); }}
+                      onClick={() => { setView("login"); setError(""); setRegisterSuccessMsg(""); }}
                       className="text-primary font-bold hover:underline"
                     >
                       {t.auth.login}
@@ -303,8 +342,8 @@ export default function AuthPage() {
               <div className="grid grid-cols-2 gap-3 select-none">
                 <button
                   type="button"
-                  onClick={() => alert("Google credentials loading...")}
-                  className="h-10 border border-border hover:bg-muted/10 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                  onClick={() => signIn("google", { callbackUrl: "/account" })}
+                  className="h-10 border border-border hover:bg-muted/10 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
                   <span>Google</span>
                 </button>

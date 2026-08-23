@@ -5,6 +5,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, X } from "lucide-react";
 import { Product } from "@/components/grocery/product-card";
+import { useTranslation } from "@/hooks/use-translation";
 
 interface NotificationProps {
   toast: {
@@ -15,6 +16,8 @@ interface NotificationProps {
 }
 
 export function Notification({ toast, onClose }: NotificationProps) {
+  const { t } = useTranslation();
+
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(onClose, 2500);
@@ -52,7 +55,7 @@ export function Notification({ toast, onClose }: NotificationProps) {
             <div className="flex-grow min-w-0">
               <div className="flex items-center gap-1.5 text-success">
                 <Check className="w-3.5 h-3.5 stroke-[3]" />
-                <span className="text-[11px] font-bold uppercase tracking-wider">Aggiunto al Carrello!</span>
+                <span className="text-[11px] font-bold uppercase tracking-wider">{t("notification.addedToCart")}</span>
               </div>
               <h5 className="font-serif text-sm font-semibold text-foreground truncate pr-2 mt-0.5 leading-tight">
                 {toast.product.name}
@@ -63,7 +66,7 @@ export function Notification({ toast, onClose }: NotificationProps) {
             <button
               onClick={onClose}
               className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-muted/10 active:scale-90 text-muted-foreground transition-all"
-              aria-label="Nascondi"
+              aria-label={t("notification.dismissAria")}
             >
               <X className="w-4 h-4 stroke-[2]" />
             </button>

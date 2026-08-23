@@ -6,7 +6,6 @@ import {
   Menu,
   X,
   ShoppingBag,
-  MapPin,
   ChevronDown,
   Phone,
   Heart,
@@ -18,9 +17,10 @@ import { cn } from "@/lib/utils";
 
 import { useCartStore, selectCartCount } from "@/store/cart";
 import { useUiStore } from "@/store/ui";
-
-import { useLocaleStore } from "@/store/locale";
 import { useTranslation } from "@/hooks/use-translation";
+import { useSession } from "next-auth/react";
+import { useAuthStore } from "@/store/auth";
+import { useRouter } from "next/navigation";
 
 interface MobileNavbarProps {
   onCategorySelect: (catId: string) => void;
@@ -28,36 +28,17 @@ interface MobileNavbarProps {
   onLocaleChange?: (lang: "it" | "en") => void;
 }
 
-const ACCORDION_DEPARTMENTS = [
-  {
-    id: "dispensa",
-    name: "La Dispensa",
-    items: ["Olio Extra Vergine", "Aceto Balsamico di Modena", "Pasta di Gragnano", "Sughi & Conserve"],
-  },
-  {
-    id: "latticini",
-    name: "Latticini & Salumi",
-    items: ["Parmigiano Reggiano DOP", "Mozzarella di Bufala", "Prosciutto di Parma DOP", "Pecorino Romano"],
-  },
-  {
-    id: "panetteria",
-    name: "Panetteria Fresca",
-    items: ["Pane Tradizionale", "Focaccia Barese", "Grissini", "Pasticceria Artigianale"],
-  },
-  {
-    id: "enoteca",
-    name: "Enoteca Selezionata",
-    items: ["Vini Rossi DOCG", "Bollicine Italiane", "Vini Bianchi", "Liquori Toscani"],
-  },
-];
+import { getUnifiedStorefrontNavigation } from "@/lib/cms";
+import { SidebarNode } from "@/types/sidebar";
 
 export function MobileNavbar({
   onCategorySelect,
-  locale = "it",
-  onLocaleChange
+  onLocaleChange,
 }: MobileNavbarProps) {
+  const router = useRouter();
+  const { status } = useSession();
   const cartCount = useCartStore(selectCartCount);
-  const { t, locale: translationLocale, setLocale } = useTranslation();
+  const { t, locale, setLocale } = useTranslation();
   const onCartClick = useUiStore((state) => state.openCart);
   
   const isDrawerOpen = useUiStore((state) => state.mobileMenuOpen);
@@ -65,6 +46,29 @@ export function MobileNavbar({
   const closeMobileMenu = useUiStore((state) => state.closeMobileMenu);
 
   const [expandedDept, setExpandedDept] = useState<string | null>(null);
+  const [navDepartments, setNavDepartments] = React.useState<SidebarNode[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+    async function loadMenu() {
+      try {
+        const tree = await getUnifiedStorefrontNavigation();
+        if (active && tree && tree.length > 0) {
+          setNavDepartments(tree);
+        }
+      } catch (err) {
+        console.error("Failed to load storefront menu in mobile-navbar:", err);
+      }
+    }
+    loadMenu();
+    return () => {
+      active = false;
+    };
+  }, [locale]);
+
+  const departments = React.useMemo<SidebarNode[]>(() => {
+    return navDepartments;
+  }, [navDepartments]);
 
   const toggleDrawer = () => {
     if (isDrawerOpen) {
@@ -91,7 +95,6 @@ export function MobileNavbar({
     }
   };
 
-
   return (
     <>
       {/* Top Mobile Sticky Header Bar */}
@@ -101,7 +104,7 @@ export function MobileNavbar({
         <button
           onClick={toggleDrawer}
           className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-slate-100 active:scale-90 text-slate-800 transition-all btn-touch-active"
-          aria-label={t("ui.openMenu")}
+          aria-label={t("mobileNavbar.openMenu")}
         >
           <Menu className="w-6 h-6 stroke-[2]" />
         </button>
@@ -110,6 +113,7 @@ export function MobileNavbar({
         <div
           onClick={() => handleCategoryClick("tutti")}
           className="flex items-center gap-1.5 cursor-pointer"
+          aria-label={t("mobileNavbar.logoAlt")}
         >
           <div className="w-7.5 h-7.5 rounded bg-green-600 flex items-center justify-center text-white font-bold text-sm shadow-sm px-2 py-0.5">
             A
@@ -123,7 +127,7 @@ export function MobileNavbar({
         <button
           onClick={onCartClick}
           className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-slate-100 active:scale-95 text-slate-800 relative transition-all btn-touch-active"
-          aria-label={t("ui.viewCart")}
+          aria-label={t("mobileNavbar.viewCart")}
         >
           <ShoppingBag className="w-5.5 h-5.5 stroke-[2]" />
           {cartCount > 0 && (
@@ -157,7 +161,7 @@ export function MobileNavbar({
             >
               {/* Header Container */}
               <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white select-none">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5" aria-label={t("mobileNavbar.logoAlt")}>
                   <div className="w-6 h-6 rounded bg-green-600 flex items-center justify-center text-white font-bold text-xs">
                     A
                   </div>
@@ -172,6 +176,7 @@ export function MobileNavbar({
                       "px-2 py-0.5 rounded transition-all",
                       locale === "it" ? "bg-green-600 text-white shadow-sm" : "text-slate-400"
                     )}
+                    aria-label={t("nav.selectLangIt")}
                   >
                     IT
                   </button>
@@ -181,6 +186,7 @@ export function MobileNavbar({
                       "px-2 py-0.5 rounded transition-all",
                       locale === "en" ? "bg-green-600 text-white shadow-sm" : "text-slate-400"
                     )}
+                    aria-label={t("nav.selectLangEn")}
                   >
                     EN
                   </button>
@@ -189,7 +195,7 @@ export function MobileNavbar({
                 <button
                   onClick={toggleDrawer}
                   className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 active:scale-90 text-slate-700 transition-all"
-                  aria-label={t("ui.closeMenu")}
+                  aria-label={t("mobileNavbar.closeMenu")}
                 >
                   <X className="w-5 h-5 stroke-[2]" />
                 </button>
@@ -197,40 +203,36 @@ export function MobileNavbar({
  
               {/* Accordion Departments list */}
               <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6 bg-slate-50/50">
-                
-                {/* Delivery ZIP CAP details */}
-                <div className="flex gap-2.5 border border-slate-200 rounded-lg p-3 bg-white select-none shadow-sm">
-                  <MapPin className="w-5 h-5 text-green-600 flex-shrink-0" />
-                  <div>
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t("ui.deliveryCap")}</span>
-                    <span className="text-xs font-bold text-slate-800">{t("ui.deliveryLocation")}</span>
-                  </div>
-                </div>
- 
                 {/* Profile quick links in drawer */}
                 <div className="grid grid-cols-2 gap-2 select-none">
-                  <a
-                    href="/account"
-                    onClick={() => closeMobileMenu()}
-                    className="border border-slate-200 bg-white rounded-lg p-3 flex flex-col gap-1 items-center text-center hover:border-green-600 transition-all shadow-sm"
+                  <button
+                    onClick={() => {
+                      closeMobileMenu();
+                      const isAuth = status === "authenticated" || Boolean(typeof window !== "undefined" && useAuthStore.getState().token);
+                      router.push(isAuth ? "/account" : "/accedi");
+                    }}
+                    className="border border-slate-200 bg-white rounded-lg p-3 flex flex-col gap-1 items-center text-center hover:border-green-600 transition-all shadow-sm cursor-pointer"
                   >
                     <User className="w-5 h-5 text-green-600" />
-                    <span className="text-xs font-bold text-slate-800">{t("ui.myProfile")}</span>
-                  </a>
-                  <a
-                    href="/account"
-                    onClick={() => closeMobileMenu()}
-                    className="border border-slate-200 bg-white rounded-lg p-3 flex flex-col gap-1 items-center text-center hover:border-green-600 transition-all shadow-sm"
+                    <span className="text-xs font-bold text-slate-800">{t("mobileNavbar.myProfile")}</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      closeMobileMenu();
+                      const isAuth = status === "authenticated" || Boolean(typeof window !== "undefined" && useAuthStore.getState().token);
+                      router.push(isAuth ? "/account?tab=wishlist" : "/accedi");
+                    }}
+                    className="border border-slate-200 bg-white rounded-lg p-3 flex flex-col gap-1 items-center text-center hover:border-green-600 transition-all shadow-sm cursor-pointer"
                   >
                     <Heart className="w-5 h-5 text-red-500" />
-                    <span className="text-xs font-bold text-slate-800">{t("ui.myFavorites")}</span>
-                  </a>
+                    <span className="text-xs font-bold text-slate-800">{t("mobileNavbar.myFavorites")}</span>
+                  </button>
                 </div>
- 
+
                 {/* Departments Header */}
                 <div className="space-y-2">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 select-none">{t("ui.shoppingDepartments")}</h4>
- 
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest pl-1 select-none">{t("mobileNavbar.shoppingDepartments")}</h4>
+
                   <div className="flex flex-col border border-slate-200 rounded-lg bg-white overflow-hidden shadow-sm">
                     {/* View all button */}
                     <button
@@ -238,29 +240,38 @@ export function MobileNavbar({
                       className="w-full text-left h-12 px-4 text-sm font-bold hover:bg-slate-50 border-b border-slate-100 text-green-600 flex items-center gap-2 select-none"
                     >
                       <Sparkles className="w-4 h-4 text-green-600 animate-pulse" />
-                      {t("ui.allProducts")}
+                      {t("mobileNavbar.allProducts")}
                     </button>
- 
+
                     {/* Department accordion items */}
-                    {ACCORDION_DEPARTMENTS.map((dept) => {
+                    {departments.map((dept) => {
                       const isExpanded = expandedDept === dept.id;
+                      const hasChildren = dept.children && dept.children.length > 0;
                       return (
                         <div key={dept.id} className="border-b border-slate-100 last:border-b-0">
                           <button
-                            onClick={() => toggleAccordion(dept.id)}
+                            onClick={() => {
+                              if (hasChildren) {
+                                toggleAccordion(dept.id);
+                              } else {
+                                handleCategoryClick(dept.handle);
+                              }
+                            }}
                             className="w-full h-12 px-4 flex items-center justify-between text-sm font-semibold text-slate-800 hover:bg-slate-50"
                           >
                             <span>{dept.name}</span>
-                            <ChevronDown
-                              className={cn(
-                                "w-4 h-4 text-slate-400 transition-transform duration-200",
-                                isExpanded && "transform rotate-180"
-                              )}
-                            />
+                            {hasChildren && (
+                              <ChevronDown
+                                className={cn(
+                                  "w-4 h-4 text-slate-400 transition-transform duration-200",
+                                  isExpanded && "transform rotate-180"
+                                )}
+                              />
+                            )}
                           </button>
- 
+
                           <AnimatePresence initial={false}>
-                            {isExpanded && (
+                            {hasChildren && isExpanded && (
                               <motion.div
                                 initial={{ height: 0, opacity: 0 }}
                                 animate={{ height: "auto", opacity: 1 }}
@@ -269,13 +280,13 @@ export function MobileNavbar({
                                 className="overflow-hidden bg-slate-50/50 border-t border-slate-100"
                               >
                                 <div className="py-2 px-6 flex flex-col gap-2.5">
-                                  {dept.items.map((subItem) => (
+                                  {dept.children.map((subItem) => (
                                     <button
-                                      key={subItem}
-                                      onClick={() => handleCategoryClick(dept.id)}
+                                      key={subItem.id}
+                                      onClick={() => handleCategoryClick(subItem.handle)}
                                       className="text-xs text-slate-500 hover:text-green-600 font-semibold py-1 text-left block"
                                     >
-                                      {subItem}
+                                      {subItem.name}
                                     </button>
                                   ))}
                                 </div>
@@ -288,25 +299,26 @@ export function MobileNavbar({
                   </div>
                 </div>
               </div>
- 
+
               {/* Drawer Footer Utility Panel */}
               <div className="p-4 border-t border-slate-200 bg-white space-y-4 select-none">
                 <div className="flex justify-around items-center text-xs font-semibold text-slate-400">
-                  <a href="/account" onClick={() => closeMobileMenu()} className="hover:text-green-600 transition-colors flex items-center gap-1">
-                    <Heart className="w-3.5 h-3.5 text-red-500" /> Spesa Preferita
+                  <a href="/account?tab=wishlist" onClick={() => closeMobileMenu()} className="hover:text-green-600 transition-colors flex items-center gap-1">
+                    <Heart className="w-3.5 h-3.5 text-red-500" /> {t("mobileNavbar.favoriteShopping")}
                   </a>
                   <span className="text-slate-200">|</span>
-                  <a href="https://wa.me/3902123456" className="hover:text-green-600 transition-colors flex items-center gap-1">
-                    <HelpCircle className="w-3.5 h-3.5 text-green-600" /> Supporto H24
+                  <a href="https://wa.me/393513476740" target="_blank" rel="noopener noreferrer" className="hover:text-green-600 transition-colors flex items-center gap-1">
+                    <HelpCircle className="w-3.5 h-3.5 text-green-600" /> {t("mobileNavbar.supportH24")}
                   </a>
                 </div>
- 
+
                 <a
-                  href="tel:+3902123456"
+                  href="tel:+393513476740"
                   className="h-11 bg-green-600 text-white hover:bg-green-700 font-semibold text-sm rounded-md flex items-center justify-center gap-2 shadow-sm transition-all"
+                  aria-label={t("mobileNavbar.callCustomerService")}
                 >
                   <Phone className="w-4 h-4 text-white" />
-                  {t("ui.callCustomerService")}
+                  {t("mobileNavbar.callCustomerService")}
                 </a>
               </div>
             </motion.div>

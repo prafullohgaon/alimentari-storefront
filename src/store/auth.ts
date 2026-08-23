@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { CustomerProfile } from "@/lib/shopify";
+import { useCartStore } from "@/store/cart";
+import { useWishlistStore } from "@/store/wishlist";
 
 interface AuthState {
   token: string | null;
@@ -19,8 +21,16 @@ export const useAuthStore = create<AuthState>()(
       profile: null,
       isLoading: false,
       login: (token) => set({ token, isLoading: false }),
-      logout: () => set({ token: null, profile: null, isLoading: false }),
-      setProfile: (profile) => set({ profile, isLoading: false }),
+      logout: () => {
+        useCartStore.getState().switchToGuestMode();
+        useWishlistStore.getState().setCustomerKey("guest");
+        set({ token: null, profile: null, isLoading: false });
+      },
+      setProfile: (profile) => {
+        const customerKey = profile?.id || profile?.email || "guest";
+        useWishlistStore.getState().setCustomerKey(customerKey);
+        set({ profile, isLoading: false });
+      },
       setIsLoading: (isLoading) => set({ isLoading }),
     }),
     {

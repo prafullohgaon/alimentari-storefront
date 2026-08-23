@@ -5,17 +5,16 @@ import Link from "next/link";
 import { initAnalytics } from "@/lib/analytics";
 
 export function CookieBanner() {
+  const [mounted, setMounted] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    // Check if consent has already been saved on the client
+    setMounted(true);
     const consent = localStorage.getItem("alimentari_cookies_consent");
     if (!consent) {
-      // Small delay for natural page load flow
       const timer = setTimeout(() => setShowBanner(true), 1200);
       return () => clearTimeout(timer);
     } else if (consent === "accepted") {
-      // Direct telemetry triggers on immediate reload
       initAnalytics(true);
     }
   }, []);
@@ -24,40 +23,41 @@ export function CookieBanner() {
     const value = accepted ? "accepted" : "declined";
     localStorage.setItem("alimentari_cookies_consent", value);
     setShowBanner(false);
-
-    // Trigger dynamic telemetry init
     initAnalytics(accepted);
   };
 
-  if (!showBanner) return null;
+  if (!mounted || !showBanner) return null;
 
   return (
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 left-4 right-4 md:right-auto md:max-w-sm z-50 bg-[#FAF7F2]/95 backdrop-blur-md border border-[#EFECE6] rounded-xl p-4.5 shadow-premium animate-slideIn select-none"
+      className="fixed bottom-3 left-3 right-3 sm:left-4 sm:right-auto sm:max-w-sm z-50 bg-[#FAF7F2]/95 backdrop-blur-md border border-[#EFECE6] rounded-2xl p-3 sm:p-4 shadow-xl select-none"
     >
-      <div className="space-y-3">
-        <h4 className="font-serif text-sm font-bold text-[#1C3B2B] tracking-tight">
-          Informativa sui Cookie
-        </h4>
-        <p className="text-[11px] font-semibold text-muted-foreground leading-normal">
-          Utilizziamo cookie tecnici essenziali per il funzionamento del carrello. Con il tuo consenso, abilitiamo cookie analitici per migliorare il servizio. Leggi la nostra{" "}
-          <Link href="/cookie-policy" className="underline hover:text-primary transition-colors">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="font-serif text-xs sm:text-sm font-bold text-[#1C3B2B] tracking-tight">
+            Informativa Cookie
+          </h4>
+          <Link href="/cookie-policy" className="text-[10px] text-emerald-800 font-bold underline hover:text-emerald-700">
             Cookie Policy
           </Link>
-          .
+        </div>
+        <p className="text-[10px] sm:text-[11px] font-medium text-slate-600 leading-snug">
+          Utilizziamo cookie tecnici per il carrello ed analitici previo consenso.
         </p>
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex items-center gap-2 pt-1">
           <button
+            type="button"
             onClick={() => handleConsent(true)}
-            className="flex-grow h-8 bg-primary hover:bg-primary/95 text-primary-foreground font-bold text-[11px] rounded-lg shadow-sm transition-all"
+            className="flex-1 h-9 min-h-[44px] bg-emerald-800 hover:bg-emerald-900 text-white font-extrabold text-xs rounded-xl shadow-xs active:scale-95 transition-all cursor-pointer"
           >
             Accetta Tutti
           </button>
           <button
+            type="button"
             onClick={() => handleConsent(false)}
-            className="px-3 h-8 bg-transparent text-muted-foreground hover:text-foreground font-bold text-[11px] transition-all"
+            className="flex-1 h-9 min-h-[44px] bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200/80 active:scale-95 transition-all cursor-pointer"
           >
             Solo Essenziali
           </button>

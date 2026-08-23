@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useUiStore } from "@/store/ui";
 import { cn } from "@/lib/utils";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { useTranslation } from "@/hooks/use-translation";
 
 interface SearchOverlayProps {
   products: Product[];
@@ -42,6 +43,7 @@ export function SearchOverlay({
   onAddToCart,
   onSearchSubmit,
 }: SearchOverlayProps) {
+  const { t, locale } = useTranslation();
   // Read open state and close action directly from the global UI store
   const isOpen = useUiStore((state) => state.searchOpen);
   const onClose = useUiStore((state) => state.closeSearch);
@@ -108,7 +110,7 @@ export function SearchOverlay({
         try {
           const { searchProducts } = await import("@/lib/shopify");
           const { trackSearch } = await import("@/lib/analytics");
-          const results = await searchProducts(val);
+          const results = await searchProducts(val, locale);
           setSuggestedProducts(results);
           trackSearch(val, results.length);
         } catch (e) {
@@ -131,6 +133,7 @@ export function SearchOverlay({
   const handleSearchClick = (search: string) => {
     setQuery(search);
     handleQueryChange(search);
+    onClose();
     onSearchSubmit(search);
   };
 
@@ -140,6 +143,7 @@ export function SearchOverlay({
       if (!recentSearches.includes(query.trim())) {
         setRecentSearches((prev) => [query.trim(), ...prev.slice(0, 4)]);
       }
+      onClose();
       onSearchSubmit(query);
     }
   };
@@ -218,7 +222,7 @@ export function SearchOverlay({
       aria-labelledby="search-modal-title"
       className="fixed inset-0 z-[100] bg-[#FAF7F2] flex flex-col animate-fadeIn select-none"
     >
-      <h2 id="search-modal-title" className="sr-only">Ricerca Prodotti</h2>
+      <h2 id="search-modal-title" className="sr-only">{t("searchOverlay.modalTitle")}</h2>
       
       {/* 1. Sticky Premium Header Bar */}
       <div className="border-b border-[#EFECE6] bg-white px-4 md:px-6 h-16 flex items-center justify-between gap-4 select-none">
@@ -229,7 +233,8 @@ export function SearchOverlay({
             type="text"
             value={query}
             onChange={(e) => handleQueryChange(e.target.value)}
-            placeholder="Cerca specialità DOP, pasta fresca, formaggi..."
+            placeholder={t("searchOverlay.inputPlaceholder")}
+            aria-label={t("searchOverlay.inputPlaceholder")}
             className="w-full h-11 bg-[#FAF7F2] border border-[#EFECE6] rounded-xl pl-12 pr-10 text-base outline-none focus:border-[#1C3B2B] focus:ring-1 focus:ring-[#1C3B2B] transition-all font-medium text-[#181816] placeholder:text-muted/60"
           />
           {query && (
@@ -237,6 +242,7 @@ export function SearchOverlay({
               type="button"
               onClick={() => handleQueryChange("")}
               className="absolute right-4 w-6 h-6 flex items-center justify-center rounded-full hover:bg-muted/20 text-muted-foreground transition-all"
+              aria-label={t("searchOverlay.clearInputAria")}
             >
               <X className="w-4 h-4 stroke-[2.5]" />
             </button>
@@ -246,8 +252,9 @@ export function SearchOverlay({
         <button
           onClick={onClose}
           className="h-10 px-4 rounded-lg font-bold text-sm text-[#1C3B2B] hover:bg-muted/15 flex items-center justify-center gap-1.5 transition-all select-none btn-touch-active"
+          aria-label={t("searchOverlay.close")}
         >
-          <span>Chiudi</span>
+          <span>{t("searchOverlay.close")}</span>
           <X className="w-4 h-4 stroke-[2.5]" />
         </button>
       </div>
@@ -269,13 +276,13 @@ export function SearchOverlay({
                     <div className="flex justify-between items-baseline select-none">
                       <h4 className="text-xs font-bold text-[#1C3B2B] uppercase tracking-widest flex items-center gap-2">
                         <History className="w-4 h-4 stroke-[2]" />
-                        Ricerche Recenti
+                        {t("searchOverlay.recentSearches")}
                       </h4>
                       <button
                         onClick={handleClearRecent}
                         className="text-[10px] font-bold text-muted-foreground hover:text-error transition-colors uppercase tracking-wider"
                       >
-                        Cancella
+                        {t("searchOverlay.clearRecent")}
                       </button>
                     </div>
                     <div className="flex flex-col border border-[#EFECE6] rounded-xl bg-white overflow-hidden shadow-sm">
@@ -297,7 +304,7 @@ export function SearchOverlay({
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-[#1C3B2B] uppercase tracking-widest flex items-center gap-2 select-none">
                     <TrendingUp className="w-4 h-4 stroke-[2]" />
-                    Ricerche Frequenti
+                    {t("searchOverlay.trendingSearches")}
                   </h4>
                   <div className="flex flex-wrap gap-2">
                     {TRENDING_SEARCHES.map((search) => (
@@ -319,7 +326,7 @@ export function SearchOverlay({
                 <div className="space-y-4 pt-4 border-t border-[#EFECE6]/60 select-none">
                   <h4 className="text-xs font-bold text-[#1C3B2B] uppercase tracking-widest flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-[#C9623B] stroke-[2]" />
-                    Spesa Frequente & Preferiti
+                    {t("searchOverlay.frequentStaples")}
                   </h4>
                   
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -350,7 +357,7 @@ export function SearchOverlay({
                             {p.name}
                           </h5>
                           <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1.5 mt-0.5">
-                            €{p.price.toFixed(2)} • <span className="text-success font-bold">Acquistato</span>
+                            €{p.price.toFixed(2)} • <span className="text-success font-bold">{t("searchOverlay.purchasedBadge")}</span>
                           </span>
                         </div>
                       </div>
@@ -364,7 +371,7 @@ export function SearchOverlay({
             /* B. SHIMMER SKELETON SEARCHING TRANSITION (Predictive autocomplete wow experience) */
             <div className="space-y-6 animate-fadeIn select-none">
               <h4 className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                Ricerca in corso...
+                {t("searchOverlay.searching")}
               </h4>
               <div className="border border-[#EFECE6] rounded-xl bg-white overflow-hidden divide-y divide-border/60 shadow-sm">
                 {[1, 2, 3].map((i) => (
@@ -391,12 +398,12 @@ export function SearchOverlay({
                         <button
                           key={cat}
                           onClick={() => {
-                            onSearchSubmit(cat);
                             onClose();
+                            onSearchSubmit(cat);
                           }}
                           className="px-2.5 py-1 text-[10px] font-bold bg-[#1C3B2B]/5 border border-[#1C3B2B]/20 text-[#1C3B2B] rounded hover:bg-[#1C3B2B]/10 transition-colors"
                         >
-                          Reparto {cat}
+                          {t("searchOverlay.departmentPrefix", { cat })}
                         </button>
                       ))}
                     </div>
@@ -405,7 +412,7 @@ export function SearchOverlay({
 
                 {/* Dietary filters inside search */}
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase">Filtra:</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase">{t("searchOverlay.filterLabel")}</span>
                   <div className="flex gap-1 overflow-x-auto scrollbar-none">
                     {DIETARY_QUICK_FILTERS.map((diet) => {
                       const isActive = activeDietary === diet;
@@ -432,10 +439,10 @@ export function SearchOverlay({
               <div className="space-y-3.5">
                 <div className="flex justify-between items-baseline select-none">
                   <h4 className="text-[10px] font-bold text-[#1C3B2B] uppercase tracking-widest">
-                    Prodotti Trovati ({displayedProducts.length})
+                    {t("searchOverlay.productsFound", { count: displayedProducts.length })}
                   </h4>
                   <span className="text-[10px] font-bold text-muted-foreground">
-                    Premi ArrowUp/Down e Invio per navigare con la tastiera
+                    {t("searchOverlay.keyboardTip")}
                   </span>
                 </div>
 
@@ -447,17 +454,17 @@ export function SearchOverlay({
                     </div>
                     <div>
                       <p className="text-sm font-bold text-foreground">
-                        Nessun abbinamento gastronomico per &quot;{query}&quot;
+                        {t("searchOverlay.noResultsTitle", { query })}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1 max-w-[280px] mx-auto">
-                        Prova ad allentare i filtri o cerca termini più generici (es. Olio, Pasta, Bio).
+                        {t("searchOverlay.noResultsSubtitle")}
                       </p>
                     </div>
                     <button
                       onClick={() => handleQueryChange("")}
                       className="text-xs font-bold text-primary underline"
                     >
-                      Resetta Ricerca
+                      {t("searchOverlay.resetSearch")}
                     </button>
                   </div>
                 ) : (
@@ -468,7 +475,7 @@ export function SearchOverlay({
                         {/* Group Category Header */}
                         <div className="flex items-center gap-3 px-1 select-none">
                           <span className="text-[9px] font-bold text-[#1C3B2B] uppercase tracking-widest bg-[#E2EAE5]/60 px-2 py-0.5 rounded-full">
-                            Reparto {category}
+                            {t("searchOverlay.categoryHeader", { category })}
                           </span>
                           <div className="flex-grow h-px bg-[#EFECE6]/80" />
                         </div>
@@ -544,7 +551,7 @@ export function SearchOverlay({
                                       <span>{p.unit}</span>
                                       {isLowStock && (
                                         <span className="text-[#C9623B] font-bold text-[9px] uppercase tracking-wider">
-                                          • Solo {p.stock} rimasti
+                                          {t("searchOverlay.lowStock", { count: p.stock ?? 0 })}
                                         </span>
                                       )}
                                     </div>
@@ -557,7 +564,7 @@ export function SearchOverlay({
                                       className="h-8 px-3.5 bg-[#1C3B2B] hover:bg-[#1C3B2B]/90 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-all"
                                     >
                                       <ShoppingBag className="w-3.5 h-3.5 stroke-[2.5]" />
-                                      Aggiungi
+                                      {t("searchOverlay.addToCart")}
                                     </button>
                                   </div>
                                 </div>

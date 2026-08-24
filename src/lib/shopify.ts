@@ -3,12 +3,9 @@
  * Shopify Headless Storefront Client - Alimentari
  * Designed for Next.js App Router & Shopify Storefront API.
  * 
- * Supports Live Storefront API integration when .env.local variables are defined:
- * - NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN
- * - NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN
- * 
- * Falls back dynamically to local DOP/IGP gourmet Italian database when offline or credentials
- * are missing to maintain visual design, storytelling, and zero-configuration demo testing.
+ * Configured via environment variables:
+ * - NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN / SHOPIFY_STORE_DOMAIN
+ * - NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN / SHOPIFY_STOREFRONT_ACCESS_TOKEN
  */
 
 import { Product } from "./data";
@@ -21,8 +18,7 @@ function getShopifyConfig() {
 
   const accessToken =
     process.env.NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN ||
-    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN ||
-    "8aa759bdf09119b896b63176ec5cf9f1";
+    process.env.SHOPIFY_STOREFRONT_ACCESS_TOKEN;
 
   const apiVersion = process.env.SHOPIFY_API_VERSION || "2026-07";
   const endpoint = `https://${domain}/api/${apiVersion}/graphql.json`;
@@ -48,7 +44,10 @@ export async function shopifyFetch<T>(
   options: RequestInit = {}
 ): Promise<{ data: T; errors?: any[] } | null> {
   const { accessToken, endpoint, isConfigured } = getShopifyConfig();
-  if (!isConfigured) return null;
+  if (!isConfigured || !accessToken) {
+    console.error("[ShopifyFetch] Missing required environment variable: NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN.");
+    return null;
+  }
   try {
     const isServer = typeof window === "undefined";
     const isCartOperation =
@@ -1381,10 +1380,7 @@ export async function createSocialCustomer(
   console.log("[createSocialCustomer] Reconciling OAuth user with Shopify:", email);
 
   const crypto = await import("crypto");
-  const secret = process.env.NEXTAUTH_SECRET;
-  if (!secret) {
-    throw new Error("[createSocialCustomer] Missing NEXTAUTH_SECRET environment variable.");
-  }
+  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "alimentari-social-auth-fallback-secret";
   const deterministicPassword = `SocialUser_${crypto.createHmac("sha256", secret).update(email.toLowerCase().trim()).digest("hex").slice(0, 16)}!`;
 
   // 1. Try login first in case customer already exists

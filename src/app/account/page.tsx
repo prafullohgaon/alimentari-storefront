@@ -70,9 +70,8 @@ interface MockSubscription {
 }
 
 import { useRouter } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
-import { useCartStore } from "@/store/cart";
-import { useUiStore } from "@/store/ui";
+import { signIn, signOut, useSession } from "next-auth/react";
+import { useCartStore, prepareOrderLineItemsForReorder } from "@/store/cart";
 import { useAuthStore } from "@/store/auth";
 import { useWishlistStore } from "@/store/wishlist";
 import { useDeliveryPreferencesStore } from "@/store/delivery-preferences";
@@ -187,6 +186,7 @@ export default function AccountDashboard() {
   const [customerOrders, setCustomerOrders] = useState<any[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState(true);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<any | null>(null);
+  const [reorderWarning, setReorderWarning] = useState<string | null>(null);
 
   // Unified Session Redirection & Profile Fetching
   useEffect(() => {
@@ -241,7 +241,7 @@ export default function AccountDashboard() {
 
             setPhone(profileData.phone || "");
 
-            const calculatedName = `${profileData.firstName || ""} ${profileData.lastName || ""}`.trim() || session?.user?.name || "Cliente Alimentari";
+            const calculatedName = `${profileData.firstName || ""} ${profileData.lastName || ""}`.trim() || session?.user?.name || "Cliente 081 Food & Beverage";
             
             if (profileData.addresses && profileData.addresses.length > 0) {
               const defaultAddrId = profileData.defaultAddress?.id;
@@ -421,7 +421,7 @@ export default function AccountDashboard() {
     setPasswordSuccess(false);
     setPasswordError(null);
 
-    const activeEmail = email || session?.user?.email;
+    const activeEmail = useAuthStore.getState().profile?.email || session?.user?.email || email;
     if (!activeEmail) {
       setPasswordError(t.dashboard.passwordChangeFailed);
       return;
@@ -459,19 +459,20 @@ export default function AccountDashboard() {
     try {
       const { customerLogin, updateCustomerPassword } = await import("@/lib/shopify");
 
-      // Step 2: Verify current password
-      const verifyRes = await customerLogin(activeEmail, currentPassword);
-      if (verifyRes.error || !verifyRes.token) {
-        setPasswordError(t.dashboard.currentPasswordIncorrect);
-        setIsChangingPassword(false);
-        return;
-      }
-
-      // Step 3: Update password on Shopify using active customer token
-      const { success, error } = await updateCustomerPassword(customerToken, newPassword);
+      // Step 2 & 3: Verify current password against the authenticated customer profile and update password on Shopify
+      const { success, error } = await updateCustomerPassword(
+        customerToken,
+        newPassword,
+        currentPassword,
+        activeEmail
+      );
 
       if (!success) {
-        setPasswordError(error || t.dashboard.passwordChangeFailed);
+        setPasswordError(
+          error === "CURRENT_PASSWORD_INCORRECT"
+            ? t.dashboard.currentPasswordIncorrect
+            : error || t.dashboard.passwordChangeFailed
+        );
         setIsChangingPassword(false);
         return;
       }
@@ -480,8 +481,13 @@ export default function AccountDashboard() {
       const newTokenRes = await customerLogin(activeEmail, newPassword);
 
       if (newTokenRes.token) {
-        // Step 5: Update Auth Store with fresh token
+        // Step 5: Update Auth Store and NextAuth session with fresh token
         useAuthStore.getState().login(newTokenRes.token);
+        await signIn("credentials", {
+          email: activeEmail,
+          password: newPassword,
+          redirect: false,
+        });
 
         // Step 6: Re-synchronize active cart buyer identity with new token
         const activeCartId = useCartStore.getState().cartId;
@@ -504,8 +510,7 @@ export default function AccountDashboard() {
         setConfirmPassword("");
         setPasswordError(t.dashboard.sessionRefreshRequired);
       }
-    } catch (err) {
-      console.error("[handlePasswordChangeSubmit] Error:", err);
+    } catch {
       setPasswordError(t.dashboard.passwordChangeFailed);
     } finally {
       setIsChangingPassword(false);
@@ -703,7 +708,7 @@ export default function AccountDashboard() {
           await customerDefaultAddressUpdate(customerToken, resultAddressId);
         }
 
-        const calculatedName = `${trimmedFirstName} ${trimmedLastName}`.trim() || "Cliente Alimentari";
+        const calculatedName = `${trimmedFirstName} ${trimmedLastName}`.trim() || "Cliente 081 Food & Beverage";
         const updatedProfile = await getCustomerProfile(customerToken);
         if (updatedProfile?.addresses) {
           const defaultAddrId = updatedProfile.defaultAddress?.id;
@@ -772,7 +777,7 @@ export default function AccountDashboard() {
       if (!success) {
         setAddressError(error || (locale === "it" ? "Errore durante la rimozione dell'indirizzo." : "Failed to delete address."));
       } else {
-        const calculatedName = `${firstName} ${lastName}`.trim() || "Cliente Alimentari";
+        const calculatedName = `${firstName} ${lastName}`.trim() || "Cliente 081 Food & Beverage";
         const updatedProfile = await getCustomerProfile(customerToken);
         if (updatedProfile) {
           const defaultAddrId = updatedProfile.defaultAddress?.id;
@@ -837,7 +842,7 @@ export default function AccountDashboard() {
       if (!success) {
         setAddressError(error || (locale === "it" ? "Errore durante l'impostazione dell'indirizzo predefinito." : "Failed to set default address."));
       } else {
-        const calculatedName = `${firstName} ${lastName}`.trim() || "Cliente Alimentari";
+        const calculatedName = `${firstName} ${lastName}`.trim() || "Cliente 081 Food & Beverage";
         const updatedProfile = await getCustomerProfile(customerToken);
         if (updatedProfile) {
           const defaultAddrId = updatedProfile.defaultAddress?.id;
@@ -880,43 +885,6 @@ export default function AccountDashboard() {
     } finally {
       setSettingDefaultAddressId(null);
     }
-  };
-
-  // Payment Methods States
-  const [payments, setPayments] = useState<Array<{
-    id: string;
-    type: string;
-    last4: string;
-    expiry: string;
-    holder: string;
-    isDefault: boolean;
-  }>>([]);
-
-  const [newCardNumber, setNewCardNumber] = useState("");
-  const [newCardExpiry, setNewCardExpiry] = useState("");
-  const [newCardCVV, setNewCardCVV] = useState("");
-  const [showAddPayment, setShowAddPayment] = useState(false);
-
-  const handleAddPayment = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newCardNumber.length < 16) return;
-    const newPay = {
-      id: `pay-${Date.now()}`,
-      type: "Visa",
-      last4: newCardNumber.slice(-4),
-      expiry: newCardExpiry || "12/29",
-      holder: (`${firstName} ${lastName}`.trim() || session?.user?.name || "Cliente Alimentari").toUpperCase(),
-      isDefault: false
-    };
-    setPayments([...payments, newPay]);
-    setNewCardNumber("");
-    setNewCardExpiry("");
-    setNewCardCVV("");
-    setShowAddPayment(false);
-  };
-
-  const deletePayment = (id: string) => {
-    setPayments(payments.filter((p) => p.id !== id));
   };
 
   // Customer Key for Data Isolation
@@ -1100,13 +1068,17 @@ export default function AccountDashboard() {
   };
 
   const loadSavedListToActiveCart = (items: SavedListItem[]) => {
+    let firstAdded: Product | null = null;
     items.forEach((it) => {
       const p = findCatalogProduct(it.productId);
       if (p) {
+        if (!firstAdded) firstAdded = p;
         useCartStore.getState().addItem(p, it.quantity);
       }
     });
-    useUiStore.getState().openCart();
+    if (firstAdded) {
+      setToast({ id: String(Date.now()), product: firstAdded });
+    }
   };
 
   // Grocery Subscriptions State
@@ -1173,19 +1145,26 @@ export default function AccountDashboard() {
 
   const handleReorderOrder = (order: any) => {
     if (!order?.lineItems) return;
-    order.lineItems.forEach((item: any) => {
-      const reorderProduct: Product = {
-        id: item.variantId || item.productId || `reorder-${Date.now()}`,
-        name: item.title,
-        price: parseFloat(item.price?.amount || "0"),
-        unit: "1 pz",
-        category: "Spesa",
-        imageUrl: item.imageUrl || "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop",
-        rating: 5,
-      };
-      addItem(reorderProduct, item.quantity || 1);
+    setReorderWarning(null);
+    const { restorableProducts, warningMessage } = prepareOrderLineItemsForReorder(
+      order.lineItems,
+      locale
+    );
+
+    if (warningMessage) {
+      setReorderWarning(warningMessage);
+    }
+
+    if (restorableProducts.length === 0) {
+      return;
+    }
+
+    restorableProducts.forEach(({ product, quantity }) => {
+      addItem(product, quantity);
     });
-    useUiStore.getState().openCart();
+    if (restorableProducts[0]?.product) {
+      setToast({ id: String(Date.now()), product: restorableProducts[0].product });
+    }
   };
   // Component-Level Unauthenticated Route Guard
   const hasAuthToken = Boolean(
@@ -1299,7 +1278,7 @@ export default function AccountDashboard() {
                 ) : (
                   <>
                     <h4 className="font-serif font-bold text-sm text-foreground truncate">
-                      {`${firstName} ${lastName}`.trim() || session?.user?.name || "Cliente Alimentari"}
+                      {`${firstName} ${lastName}`.trim() || session?.user?.name || "Cliente 081 Food & Beverage"}
                     </h4>
                     <p className="text-xs text-muted-foreground truncate">
                       {email || session?.user?.email || ""}
@@ -1627,6 +1606,16 @@ export default function AccountDashboard() {
                       {locale === "it" ? "I Miei Ordini Recenti" : "My Recent Orders"}
                     </h3>
 
+                    {reorderWarning && (
+                      <div
+                        role="alert"
+                        className="p-4 bg-error/10 border border-error/25 text-error rounded-xl flex items-center gap-2 font-semibold text-xs"
+                      >
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                        <span>{reorderWarning}</span>
+                      </div>
+                    )}
+
                     {isOrdersLoading ? (
                       <div className="space-y-4 animate-pulse">
                         {[1, 2].map((n) => (
@@ -1641,8 +1630,8 @@ export default function AccountDashboard() {
                         </h4>
                         <p className="text-xs text-muted-foreground max-w-sm mx-auto font-medium">
                           {locale === "it"
-                            ? "Non hai ancora effettuato ordini su Alimentari. Inizia ad acquistare le tue specialità preferite!"
-                            : "You haven't placed any orders on Alimentari yet. Start shopping your favorite specialties!"}
+                            ? "Non hai ancora effettuato ordini su 081 Food & Beverage. Inizia ad acquistare le tue specialità preferite!"
+                            : "You haven't placed any orders on 081 Food & Beverage yet. Start shopping your favorite specialties!"}
                         </p>
                         <Button
                           onClick={() => router.push("/reparto")}
@@ -2188,7 +2177,7 @@ export default function AccountDashboard() {
                                         <Button
                                           onClick={() => {
                                             addItem(p, it.quantity);
-                                            useUiStore.getState().openCart();
+                                            setToast({ id: String(Date.now()), product: p });
                                           }}
                                           variant="outline"
                                           size="sm"
@@ -2669,119 +2658,27 @@ export default function AccountDashboard() {
                 {/* 7. PAYMENT METHODS */}
                 {activeTab === "pagamenti" && (
                   <div className="space-y-6">
-                    <div className="flex justify-between items-center pb-3 border-b border-border/50 mb-2">
+                    <div className="pb-3 border-b border-border/50 mb-2">
                       <h3 className="font-serif text-2xl font-bold tracking-tight">
                         {t.dashboard.payments}
                       </h3>
-
-                      <Button
-                        onClick={() => setShowAddPayment(!showAddPayment)}
-                        variant="outline"
-                        size="sm"
-                        className="font-bold text-xs h-9"
-                      >
-                        <Plus className="w-4 h-4 mr-1 text-primary" />
-                        {locale === "it" ? "Nuova Carta" : "Add Card"}
-                      </Button>
                     </div>
 
-                    {showAddPayment && (
-                      <form onSubmit={handleAddPayment} className="border border-primary/20 rounded-xl p-4 space-y-4 bg-primary/5 select-none">
-                        <h4 className="font-serif font-bold text-sm text-foreground">
-                          {locale === "it" ? "Associa Carta di Credito" : "Associate Credit Card"}
-                        </h4>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <Input
-                            placeholder={tFunc("account.cardNumberPlaceholder")}
-                            value={newCardNumber}
-                            onChange={(e) => setNewCardNumber(e.target.value)}
-                            maxLength={16}
-                            required
-                          />
-                          <Input
-                            placeholder={tFunc("account.cardExpiryPlaceholder")}
-                            value={newCardExpiry}
-                            onChange={(e) => setNewCardExpiry(e.target.value)}
-                            maxLength={5}
-                            required
-                          />
-                          <Input
-                            placeholder={tFunc("account.cardCvvPlaceholder")}
-                            type="password"
-                            value={newCardCVV}
-                            onChange={(e) => setNewCardCVV(e.target.value)}
-                            maxLength={3}
-                            required
-                          />
-                        </div>
-
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowAddPayment(false)}
-                            className="text-xs h-8"
-                          >
-                            {locale === "it" ? "Annulla" : "Cancel"}
-                          </Button>
-                          <Button type="submit" variant="primary" size="sm" className="font-bold text-xs h-8 shadow-soft">
-                            {locale === "it" ? "Salva" : "Save"}
-                          </Button>
-                        </div>
-                      </form>
-                    )}
-
-                    {payments.length === 0 ? (
-                      <div className="text-center py-12 border border-dashed border-border/80 rounded-xl bg-card/50 text-muted-foreground select-none">
-                        <CreditCard className="w-8 h-8 mx-auto mb-2 text-muted-foreground/50" />
-                        <p className="font-semibold text-sm">
-                          {locale === "it" ? "Nessun metodo di pagamento salvato" : "No saved payment method"}
-                        </p>
+                    <div className="text-center py-12 px-6 border border-border/80 rounded-xl bg-secondary/20 text-foreground select-none space-y-3">
+                      <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto">
+                        <CreditCard className="w-6 h-6 stroke-[1.75]" />
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {payments.map((p) => (
-                        <div
-                          key={p.id}
-                          className={cn(
-                            "border rounded-xl p-4 flex flex-col justify-between shadow-soft bg-card transition-all",
-                            p.isDefault ? "border-primary bg-primary/5" : "border-border/80"
-                          )}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <span className="bg-primary/10 text-primary text-[10px] font-bold px-2 py-0.5 rounded block w-max uppercase mb-1">
-                                  {p.type}
-                                </span>
-                                <h4 className="font-serif font-bold text-sm text-foreground">
-                                  •••• •••• •••• {p.last4}
-                                </h4>
-                              </div>
-                              <CreditCard className="w-6 h-6 text-muted-foreground stroke-[1.5]" />
-                            </div>
-                            <div className="flex justify-between text-xs font-semibold text-muted-foreground">
-                              <span>Titolare: {p.holder}</span>
-                              <span>Scad: {p.expiry}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-2 mt-4 pt-3 border-t border-border/40 select-none">
-                            {!p.isDefault && (
-                              <button
-                                onClick={() => deletePayment(p.id)}
-                                className="text-[10px] font-bold text-error hover:underline uppercase tracking-wide ml-auto"
-                              >
-                                Rimuovi
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                      <h4 className="font-serif text-lg font-bold text-foreground">
+                        {locale === "it"
+                          ? "Pagamenti Sicuri tramite Shopify Checkout"
+                          : "Secure Payments via Shopify Checkout"}
+                      </h4>
+                      <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed font-medium">
+                        {locale === "it"
+                          ? "Per garantire la massima sicurezza e conformità agli standard PCI-DSS, 081 Food & Beverage non raccoglie né memorizza i dati delle carte di pagamento in questa pagina. Tutte le transazioni vengono gestite direttamente tramite il flusso di checkout crittografato di Shopify al momento dell'ordine."
+                          : "To ensure maximum security and PCI-DSS compliance, 081 Food & Beverage does not collect or store payment card details on this page. All transactions are processed directly through the encrypted Shopify checkout flow when you place an order."}
+                      </p>
                     </div>
-                  )}
                   </div>
                 )}
 
@@ -3025,8 +2922,8 @@ export default function AccountDashboard() {
         <div id="printable-order-receipt" className="hidden print:block p-8 bg-white text-black font-sans text-xs space-y-6">
           <div className="flex justify-between items-start border-b pb-4">
             <div>
-              <h1 className="text-2xl font-serif font-bold text-emerald-900 tracking-tight">ALIMENTARI</h1>
-              <p className="text-xs text-gray-600 font-medium">Bottega & Gastronomia Italiana</p>
+              <h1 className="text-2xl font-serif font-bold text-emerald-900 tracking-tight">081 FOOD & BEVERAGE</h1>
+              <p className="text-xs text-gray-600 font-medium">Eccellenze Napoletane</p>
             </div>
             <div className="text-right">
               <h2 className="text-base font-bold uppercase tracking-wider text-gray-800">{t.dashboard.orderReceipt}</h2>
@@ -3040,7 +2937,7 @@ export default function AccountDashboard() {
           <div className="grid grid-cols-2 gap-6 py-2 border-b">
             <div>
               <h3 className="font-bold uppercase text-[10px] text-gray-500 mb-1">{t.dashboard.customer}</h3>
-              <p className="font-semibold text-gray-800">{selectedOrderDetails.shippingAddress?.name || (session as any)?.user?.name || "Cliente Alimentari"}</p>
+              <p className="font-semibold text-gray-800">{selectedOrderDetails.shippingAddress?.name || (session as any)?.user?.name || "Cliente 081 Food & Beverage"}</p>
               <p className="text-gray-600">{selectedOrderDetails.email || email || (session as any)?.user?.email || ""}</p>
             </div>
             {selectedOrderDetails.shippingAddress && (
@@ -3114,7 +3011,7 @@ export default function AccountDashboard() {
           </div>
 
           <div className="pt-6 border-t text-[10px] text-gray-400 flex justify-between">
-            <span>Alimentari Headless Store • Alimentari.it</span>
+            <span>081 Food & Beverage — Eccellenze Napoletane</span>
             <span>Stato Pagamento: {selectedOrderDetails.financialStatus} • Stato Spedizione: {selectedOrderDetails.fulfillmentStatus}</span>
           </div>
         </div>

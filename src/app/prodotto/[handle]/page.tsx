@@ -1,31 +1,44 @@
 import React from "react";
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getProductByHandle, getProducts, getProductHandle, getProductRecommendations, getCollectionProducts } from "@/lib/shopify";
+import { cookies } from "next/headers";
+import {
+  getProductByHandle,
+  getProductSeoMetadata,
+  getProductRecommendations,
+  getCollectionProducts,
+  buildProductJsonLd,
+} from "@/lib/shopify";
 import { ProductDetailView } from "@/components/grocery/product-detail-view";
+import { Product } from "@/lib/data";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 interface ProductPageProps {
   params: Promise<{ handle: string }>;
 }
-
-import { cookies } from "next/headers";
 
 // 1. Dynamic generateMetadata (SEO, Canonical, OpenGraph)
 export async function generateMetadata({ params }: ProductPageProps): Promise<Metadata> {
   const { handle } = await params;
   const cookieStore = await cookies();
   const locale = cookieStore.get("alimentari_locale")?.value || "it";
-  const product = await getProductByHandle(handle, locale);
-  
-  if (!product) {
+  const productMeta =
+    (await getProductSeoMetadata(handle, locale)) ||
+    (await getProductByHandle(handle, locale));
+
+  if (!productMeta) {
     return {
-      title: "Prodotto non trovato | Alimentari",
+      title: "Prodotto non trovato | 081 Food & Beverage",
       description: "Il prodotto cercato non è disponibile nel nostro catalogo.",
     };
   }
 
-  const title = `${product.name} | Alimentari Gastronomia`;
-  const description = product.description || `Acquista ${product.name} su Alimentari. Gastronomia d'eccellenza, filiera corta italiana e consegna refrigerata certificata.`;
+  const title = `${productMeta.name} | 081 Food & Beverage`;
+  const description =
+    productMeta.description ||
+    `Acquista ${productMeta.name} su 081 Food & Beverage — Eccellenze Napoletane. Gastronomia d'eccellenza, filiera corta italiana e consegna refrigerata certificata.`;
   const productUrl = `https://alimentari.it/prodotto/${handle}`;
 
   return {
@@ -38,13 +51,13 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
       title,
       description,
       url: productUrl,
-      siteName: "Alimentari",
+      siteName: "081 Food & Beverage",
       images: [
         {
-          url: product.imageUrl,
+          url: productMeta.imageUrl,
           width: 800,
           height: 800,
-          alt: product.name,
+          alt: productMeta.name,
         },
       ],
       locale: locale === "en" ? "en_US" : "it_IT",
@@ -54,22 +67,12 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
       card: "summary_large_image",
       title,
       description,
-      images: [product.imageUrl],
+      images: [productMeta.imageUrl],
     },
   };
 }
 
-// 2. generateStaticParams for pre-rendering (SSG)
-export async function generateStaticParams() {
-  const products = await getProducts(50, "it");
-  return products.map((product) => ({
-    handle: getProductHandle(product),
-  }));
-}
-
-import { Product } from "@/lib/data";
-
-// 3. Server Page Component
+// 2. Server Page Component
 export default async function ProductPage({ params }: ProductPageProps) {
   const { handle } = await params;
   const cookieStore = await cookies();
@@ -104,27 +107,8 @@ export default async function ProductPage({ params }: ProductPageProps) {
     }
   }
 
-  // Embed JSON-LD structured data for Google Search Snippets
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    "name": product.name,
-    "image": product.imageUrl,
-    "description": product.description || `Acquista ${product.name} su Alimentari. Gastronomia d'eccellenza italiana.`,
-    "sku": product.sku || `AL-${product.id}`,
-    "brand": {
-      "@type": "Brand",
-      "name": product.brand || "Alimentari"
-    },
-    "offers": {
-      "@type": "Offer",
-      "url": `https://alimentari.it/prodotto/${handle}`,
-      "priceCurrency": "EUR",
-      "price": product.price,
-      "itemCondition": "https://schema.org/NewCondition",
-      "availability": product.stock && product.stock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock"
-    }
-  };
+  // Embed JSON-LD structured data for Google Search Snippets using the default available variant
+  const jsonLd = buildProductJsonLd(product, handle);
 
   return (
     <>

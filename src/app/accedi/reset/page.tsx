@@ -2,6 +2,7 @@
 
 import React, { useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { Shield, Lock, Eye, EyeOff, CheckCircle, AlertCircle, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -118,12 +119,17 @@ function ResetPasswordForm() {
       <header className="px-6 py-4 flex items-center justify-between border-b border-border/40 bg-card select-none">
         <div
           onClick={() => router.push("/")}
-          className="flex items-center gap-2 cursor-pointer"
+          className="flex items-center shrink-0 cursor-pointer"
         >
-          <div className="w-7 h-7 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
-            A
-          </div>
-          <span className="font-serif text-lg font-bold text-foreground">Alimentari</span>
+          <Image
+            src="/assets/brand/081-logo-horizontal.png"
+            alt="081 Food & Beverage — Eccellenze Napoletane"
+            width={160}
+            height={38}
+            priority
+            unoptimized
+            className="h-[38px] w-[160px] object-contain select-none"
+          />
         </div>
 
         {/* Language Switcher */}
@@ -260,7 +266,7 @@ function ResetPasswordForm() {
       {/* Footer */}
       <footer className="px-6 py-5 border-t border-border/60 bg-card select-none text-center flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] font-bold text-muted-foreground">
         <div className="flex flex-col sm:flex-row gap-2 items-center">
-          <span>© 2026 Alimentari S.r.l. - Tutti i diritti riservati.</span>
+          <span>© 2026 081 Food & Beverage — Eccellenze Napoletane. Tutti i diritti riservati.</span>
         </div>
         <span className="flex items-center gap-1.5">
           <Shield className="w-3.5 h-3.5 text-primary stroke-[2.5]" /> Secure SSL Encryption

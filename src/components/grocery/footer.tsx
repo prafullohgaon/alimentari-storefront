@@ -69,11 +69,12 @@ export function Footer({ trustpilotSettings: initialTrustpilot }: FooterProps = 
           <div className="lg:col-span-4 space-y-4 w-full max-w-sm">
             <Link href="/" className="inline-block focus:outline-none">
               <Image
-                src="/assets/footer/alimentari-logo.svg"
+                src="/assets/brand/081-logo-footer.png"
                 alt={t("footer.logoAlt")}
-                width={260}
-                height={70}
-                className="w-auto h-12 sm:h-14 max-w-[260px] object-contain"
+                width={236}
+                height={56}
+                unoptimized
+                className="w-auto h-12 sm:h-14 max-w-[240px] object-contain"
                 priority={false}
               />
             </Link>

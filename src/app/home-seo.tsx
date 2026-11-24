@@ -13,9 +13,9 @@ export function HomeSeo() {
     "@context": "https://schema.org",
     "@type": "WebSite",
     "@id": `${BASE_URL}/#website`,
-    "name": "Alimentari",
+    "name": "081 Food & Beverage",
     "url": BASE_URL,
-    "description": "Premium Italian Grocery Delivery — Authentic products sourced directly from Italian artisans, delivered across Europe.",
+    "description": "081 Food & Beverage — Eccellenze Napoletane. Authentic Neapolitan and Italian products sourced directly from artisans.",
     "inLanguage": ["it", "en"],
     "potentialAction": {
       "@type": "SearchAction",
@@ -31,15 +31,15 @@ export function HomeSeo() {
     "@context": "https://schema.org",
     "@type": "Organization",
     "@id": `${BASE_URL}/#organization`,
-    "name": "Alimentari",
+    "name": "081 Food & Beverage",
     "url": BASE_URL,
     "logo": {
       "@type": "ImageObject",
-      "url": `${BASE_URL}/logo.png`,
-      "width": 200,
-      "height": 60
+      "url": `${BASE_URL}/assets/brand/081-logo-horizontal.png`,
+      "width": 760,
+      "height": 180
     },
-    "description": "Premium Italian Grocery Delivery — Authentic products sourced directly from Italian artisans.",
+    "description": "081 Food & Beverage — Eccellenze Napoletane. Authentic Neapolitan and Italian gourmet products.",
     "address": {
       "@type": "PostalAddress",
       "addressCountry": "IT",
@@ -53,11 +53,7 @@ export function HomeSeo() {
         "availableLanguage": ["Italian", "English"]
       }
     ],
-    "sameAs": [
-      "https://www.instagram.com/alimentari",
-      "https://www.facebook.com/alimentari",
-      "https://www.tiktok.com/@alimentari"
-    ]
+    "sameAs": []
   };
 
   const webPageSchema = {
@@ -65,10 +61,10 @@ export function HomeSeo() {
     "@type": "WebPage",
     "@id": `${BASE_URL}/#webpage`,
     "url": BASE_URL,
-    "name": "Alimentari — Spesa Italiana Online | Premium Italian Grocery Delivery",
+    "name": "081 Food & Beverage — Eccellenze Napoletane | Spesa Italiana Online",
     "isPartOf": { "@id": `${BASE_URL}/#website` },
     "about": { "@id": `${BASE_URL}/#organization` },
-    "description": "Acquista prodotti alimentari italiani premium online. Formaggi DOP, salumi IGP, pasta artigianale, vini e molto altro. Consegna refrigerata in tutta Europa.",
+    "description": "081 Food & Beverage — Eccellenze Napoletane. Acquista prodotti alimentari napoletani e italiani premium online.",
     "inLanguage": ["it", "en"],
     "breadcrumb": { "@id": `${BASE_URL}/#breadcrumb` }
   };

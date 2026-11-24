@@ -2,19 +2,45 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Shield, Mail, Lock, Eye, EyeOff, User, ArrowLeft, CheckCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signIn, useSession } from "next-auth/react";
 import { customerRegister, customerRecover } from "@/lib/shopify";
-
-import { useAuthStore } from "@/store/auth";
+import { cartStorage } from "@/lib/cart-storage";
 import { useTranslation } from "@/hooks/use-translation";
+
+function getPostAuthDestination(): string {
+  if (typeof window !== "undefined") {
+    const params = new URLSearchParams(window.location.search);
+    const redirectParam = params.get("redirect");
+    const callbackUrlParam = params.get("callbackUrl");
+
+    if (
+      redirectParam === "checkout" ||
+      callbackUrlParam === "/checkout" ||
+      cartStorage.getPendingCheckoutIntent()
+    ) {
+      return "/checkout";
+    }
+
+    if (
+      callbackUrlParam &&
+      callbackUrlParam.startsWith("/") &&
+      !callbackUrlParam.startsWith("//") &&
+      callbackUrlParam !== "/accedi"
+    ) {
+      return callbackUrlParam;
+    }
+  }
+  return "/account";
+}
 
 export default function AuthPage() {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const { locale, setLocale, dict: t } = useTranslation();
   const [view, setView] = useState<"login" | "register" | "forgot">("login");
   const [showPassword, setShowPassword] = useState(false);
@@ -28,12 +54,26 @@ export default function AuthPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
 
-  // Auto redirect if already authenticated
+  // Synchronize pending checkout intent with URL query parameters
   useEffect(() => {
-    if (session || (typeof window !== "undefined" && useAuthStore.getState().token)) {
-      router.push("/account");
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const isCheckoutFlow =
+        params.get("redirect") === "checkout" || params.get("callbackUrl") === "/checkout";
+      if (isCheckoutFlow) {
+        cartStorage.setPendingCheckoutIntent(true);
+      } else {
+        cartStorage.clearPendingCheckoutIntent();
+      }
     }
-  }, [session, router]);
+  }, []);
+
+  // Auto redirect if already authenticated via authoritative NextAuth session
+  useEffect(() => {
+    if (status === "authenticated" && session?.user) {
+      router.replace(getPostAuthDestination());
+    }
+  }, [status, session, router]);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +106,7 @@ export default function AuthPage() {
               : res.error
           );
         } else if (res?.ok) {
-          router.push("/account");
+          router.push(getPostAuthDestination());
           router.refresh();
         } else {
           setError(t.auth.errors.loginFailed);
@@ -94,7 +134,7 @@ export default function AuthPage() {
           });
 
           if (res?.ok) {
-            router.push("/account");
+            router.push(getPostAuthDestination());
             router.refresh();
           } else {
             setView("login");
@@ -128,12 +168,17 @@ export default function AuthPage() {
       <header className="px-6 py-4 flex items-center justify-between border-b border-border/40 bg-card select-none">
         <div
           onClick={() => router.push("/")}
-          className="flex items-center gap-2 cursor-pointer"
+          className="flex items-center shrink-0 cursor-pointer"
         >
-          <div className="w-7 h-7 rounded bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
-            A
-          </div>
-          <span className="font-serif text-lg font-bold text-foreground">Alimentari</span>
+          <Image
+            src="/assets/brand/081-logo-horizontal.png"
+            alt="081 Food & Beverage — Eccellenze Napoletane"
+            width={160}
+            height={38}
+            priority
+            unoptimized
+            className="h-[38px] w-[160px] object-contain select-none"
+          />
         </div>
 
         {/* Language Switcher */}
@@ -342,7 +387,7 @@ export default function AuthPage() {
               <div className="grid grid-cols-2 gap-3 select-none">
                 <button
                   type="button"
-                  onClick={() => signIn("google", { callbackUrl: "/account" })}
+                  onClick={() => signIn("google", { callbackUrl: getPostAuthDestination() })}
                   className="h-10 border border-border hover:bg-muted/10 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
                   <span>Google</span>
@@ -363,7 +408,7 @@ export default function AuthPage() {
       {/* Footer Trust Ticker */}
       <footer className="px-6 py-5 border-t border-border/60 bg-card select-none text-center flex flex-col sm:flex-row justify-between items-center gap-4 text-[10px] font-bold text-muted-foreground">
         <div className="flex flex-col sm:flex-row gap-2 items-center">
-          <span>© 2026 Alimentari S.r.l. - Tutti i diritti riservati.</span>
+          <span>© 2026 081 Food & Beverage — Eccellenze Napoletane. Tutti i diritti riservati.</span>
           <span className="hidden sm:inline">|</span>
           <div className="flex gap-2">
             <a href="/privacy-policy" className="hover:text-primary transition-colors underline">Privacy</a>

@@ -56,7 +56,7 @@ export default function GlobalErrorPage({
       </div>
 
       <footer className="text-[10px] text-muted-foreground font-semibold">
-        Alimentari Storefront • System Status OK
+        081 Food & Beverage • System Status OK
       </footer>
     </div>
   );

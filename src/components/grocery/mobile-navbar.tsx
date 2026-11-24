@@ -21,6 +21,7 @@ import { useTranslation } from "@/hooks/use-translation";
 import { useSession } from "next-auth/react";
 import { useAuthStore } from "@/store/auth";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 interface MobileNavbarProps {
   onCategorySelect: (catId: string) => void;
@@ -112,15 +113,18 @@ export function MobileNavbar({
         {/* Editorial Logo */}
         <div
           onClick={() => handleCategoryClick("tutti")}
-          className="flex items-center gap-1.5 cursor-pointer"
+          className="flex items-center justify-center shrink-0 cursor-pointer"
           aria-label={t("mobileNavbar.logoAlt")}
         >
-          <div className="w-7.5 h-7.5 rounded bg-green-600 flex items-center justify-center text-white font-bold text-sm shadow-sm px-2 py-0.5">
-            A
-          </div>
-          <span className="font-sans text-xl font-bold tracking-tight text-slate-900">
-            Alimentari
-          </span>
+          <Image
+            src="/assets/brand/081-logo-horizontal.png"
+            alt={t("mobileNavbar.logoAlt")}
+            width={169}
+            height={40}
+            priority
+            unoptimized
+            className="h-[38px] w-[160px] sm:h-[40px] sm:w-[169px] object-contain select-none"
+          />
         </div>
  
         {/* Quick Cart Trigger */}
@@ -161,11 +165,22 @@ export function MobileNavbar({
             >
               {/* Header Container */}
               <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-white select-none">
-                <div className="flex items-center gap-1.5" aria-label={t("mobileNavbar.logoAlt")}>
-                  <div className="w-6 h-6 rounded bg-green-600 flex items-center justify-center text-white font-bold text-xs">
-                    A
-                  </div>
-                  <span className="font-sans text-lg font-bold text-slate-900">Alimentari</span>
+                <div
+                  onClick={() => {
+                    closeMobileMenu();
+                    handleCategoryClick("tutti");
+                  }}
+                  className="flex items-center shrink-0 cursor-pointer"
+                  aria-label={t("mobileNavbar.logoAlt")}
+                >
+                  <Image
+                    src="/assets/brand/081-logo-horizontal.png"
+                    alt={t("mobileNavbar.logoAlt")}
+                    width={144}
+                    height={34}
+                    unoptimized
+                    className="h-[34px] w-[144px] object-contain select-none"
+                  />
                 </div>
                 
                 {/* Language selection in mobile drawer header */}

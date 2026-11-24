@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: "Contattaci | Alimentari Gourmet Market",
+  title: "Contattaci | 081 Food & Beverage",
   description:
-    "Mettiti in contatto con il team di Alimentari Gourmet Market per qualsiasi informazione sui prodotti tipici italiani o assistenza sugli ordini.",
+    "Mettiti in contatto con il team di 081 Food & Beverage — Eccellenze Napoletane per qualsiasi informazione sui prodotti tipici italiani o assistenza sugli ordini.",
 };
 
 export default async function ContactPage() {

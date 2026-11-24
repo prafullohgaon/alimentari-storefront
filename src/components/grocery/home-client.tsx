@@ -1,12 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Shield, Sparkles, Truck, Leaf, ChevronLeft, ChevronRight } from "lucide-react";
 import { Product } from "@/lib/data";
-import { getProductHandle } from "@/lib/shopify";
+import {
+  getProductHandle,
+  getProducts,
+  mergeProductInventory,
+  synchronizeProductsList,
+} from "@/lib/shopify";
 import { Button } from "@/components/ui/button";
 import { ProductCard } from "@/components/grocery/product-card";
 import { MobileBottomNav } from "@/components/grocery/mobile-bottom-nav";
@@ -19,7 +24,11 @@ import { SearchOverlay } from "@/components/grocery/search-overlay";
 import { Footer } from "@/components/grocery/footer";
 import { useTranslation } from "@/hooks/use-translation";
 
-import { useCartStore, selectProductCartQuantity } from "@/store/cart";
+import {
+  useCartStore,
+  findCartItemByIdentifier,
+  selectProductCartQuantity,
+} from "@/store/cart";
 import { useUiStore } from "@/store/ui";
 
 function ShelfProductCard({
@@ -31,7 +40,9 @@ function ShelfProductCard({
   onQuantityChange: (id: string, qty: number) => void;
   onQuickView: (p: Product) => void;
 }) {
-  const quantityInCart = useCartStore(selectProductCartQuantity(product.id));
+  const quantityInCart = useCartStore(
+    selectProductCartQuantity(product.variantId || product.id)
+  );
   return (
     <ProductCard
       product={product}
@@ -169,11 +180,66 @@ interface HomeClientProps {
 
 export function HomeClient({ initialProducts, heroSlides, announcement, contactSettings, trustpilotSettings, tagline }: HomeClientProps) {
   const router = useRouter();
-  const [products] = useState<Product[]>(initialProducts);
+  const [products, setProducts] = useState<Product[]>(initialProducts);
   const [activeTab, setActiveTab] = useState<"shop" | "search" | "cart" | "account">("shop");
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
   const [toast, setToast] = useState<{ id: string; product: Product } | null>(null);
+  const lastHomeRefreshRef = useRef<number>(Date.now());
+
+  // Synchronize state when server-rendered initialProducts prop updates
+  useEffect(() => {
+    setProducts((prev) => synchronizeProductsList(prev, initialProducts));
+  }, [initialProducts]);
+
+  // Keep quickViewProduct modal synchronized if its product inventory updates
+  useEffect(() => {
+    setQuickViewProduct((prev) => {
+      if (!prev) return null;
+      const updated = products.find((p) => p.id === prev.id);
+      return updated ? mergeProductInventory(prev, updated) : prev;
+    });
+  }, [products]);
+
+  // Bounded refresh on tab visibility or browser bfcache restoration
+  useEffect(() => {
+    let active = true;
+
+    const refreshHomeProducts = async (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastHomeRefreshRef.current < 5000) return;
+      lastHomeRefreshRef.current = now;
+      try {
+        const fresh = await getProducts(48, locale);
+        if (active && fresh && fresh.length > 0) {
+          setProducts((prev) => synchronizeProductsList(prev, fresh));
+        }
+      } catch {
+        // Keep existing products state on background refresh error
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshHomeProducts(false);
+      }
+    };
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        void refreshHomeProducts(true);
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      active = false;
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [locale]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -283,12 +349,37 @@ export function HomeClient({ initialProducts, heroSlides, announcement, contactS
   const updateQuantity = useCartStore((state) => state.updateQuantity);
 
   const handleQuantityChange = useCallback((productId: string, qty: number) => {
-    const existing = useCartStore.getState().items.find((item) => item.product.id === productId);
-    const productObj = products.find((p) => p.id === productId);
-    if (!existing && qty === 1 && productObj) setToast({ id: String(Date.now()), product: productObj });
-    if (qty <= 0) removeItem(productId);
-    else if (existing) updateQuantity(productId, qty);
-    else if (productObj) addItem(productObj, qty);
+    const productObj = products.find(
+      (p) => p.id === productId || p.variantId === productId
+    );
+    const targetIdentifier = productObj?.variantId || productId;
+    const existing = findCartItemByIdentifier(
+      useCartStore.getState().items,
+      targetIdentifier
+    );
+    if (qty <= 0) {
+      removeItem(targetIdentifier);
+      return;
+    }
+    if (existing) {
+      updateQuantity(targetIdentifier, qty);
+      return;
+    }
+    if (productObj) {
+      const isProdAvailable =
+        productObj.available === false
+          ? false
+          : typeof productObj.stock === "number" && productObj.stock <= 0
+          ? false
+          : productObj.available === true
+          ? true
+          : typeof productObj.stock === "number"
+          ? productObj.stock > 0
+          : true;
+      if (!isProdAvailable) return;
+      if (qty === 1) setToast({ id: String(Date.now()), product: productObj });
+      addItem(productObj, qty);
+    }
   }, [products, addItem, removeItem, updateQuantity]);
 
   const handleQuickView = useCallback((p: Product) => {
@@ -779,7 +870,14 @@ export function HomeClient({ initialProducts, heroSlides, announcement, contactS
         product={quickViewProduct}
         isOpen={quickViewProduct !== null}
         onClose={() => setQuickViewProduct(null)}
-        quantityInCart={useCartStore.getState().items.find((item) => item.product.id === quickViewProduct?.id)?.quantity || 0}
+        quantityInCart={
+          quickViewProduct
+            ? findCartItemByIdentifier(
+                useCartStore.getState().items,
+                quickViewProduct.variantId || quickViewProduct.id
+              )?.quantity || 0
+            : 0
+        }
         onQuantityChange={handleQuantityChange}
       />
 

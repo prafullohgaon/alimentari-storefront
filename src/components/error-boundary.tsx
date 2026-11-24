@@ -78,7 +78,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
 
             <div className="text-[9px] font-mono text-muted-foreground/60 uppercase tracking-widest pt-2 border-t border-border/30">
-              Alimentari Sicurezza Attiva
+              081 Food & Beverage Sicurezza Attiva
             </div>
           </div>
         </div>

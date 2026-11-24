@@ -9,7 +9,7 @@ import { useTranslation } from "@/hooks/use-translation";
 interface QuantitySelectorProps {
   value: number;
   onChange: (value: number) => void;
-  max?: number;
+  max?: number | null;
   min?: number;
   className?: string;
   size?: "sm" | "md";
@@ -25,6 +25,8 @@ export function QuantitySelector({
 }: QuantitySelectorProps) {
   const { t } = useTranslation();
   const isSyncing = useCartStore((state) => state.isSyncing);
+  const effectiveMax =
+    typeof max === "number" && Number.isFinite(max) && max > 0 ? max : 99;
 
   // Temporary UI state for pending rapid clicks
   const [localQty, setLocalQty] = useState<number>(value);
@@ -64,7 +66,7 @@ export function QuantitySelector({
   const handleIncrement = (e: React.MouseEvent) => {
     e.stopPropagation();
     const current = pendingTargetRef.current !== null ? localQty : value;
-    if (current < max) {
+    if (current < effectiveMax) {
       const next = current + 1;
       setLocalQty(next);
       pendingTargetRef.current = next;
@@ -117,7 +119,7 @@ export function QuantitySelector({
       <button
         type="button"
         onClick={handleIncrement}
-        disabled={displayedQty >= max}
+        disabled={displayedQty >= effectiveMax}
         className={cn(
           "flex items-center justify-center text-foreground hover:bg-secondary disabled:opacity-30 disabled:hover:bg-transparent rounded transition-colors",
           {

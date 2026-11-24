@@ -9,6 +9,9 @@ import { getUnifiedStorefrontNavigation } from "@/lib/cms";
 import { SidebarNode } from "@/types/sidebar";
 import RepartoLoading from "./loading";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 // Map sort options to Shopify keys
 const getSortParams = (option: string) => {
   switch (option) {
@@ -74,8 +77,8 @@ export async function generateMetadata({
     : `${deptName} | Reparto Spesa`;
 
   const description = locale === "en"
-    ? `Browse ${deptName} on Alimentari. Authentic Italian gourmet food, certified cold chain delivery across Europe.`
-    : `Esplora la selezione di ${deptName} su Alimentari. Gastronomia d'eccellenza italiana e spedizione refrigerata.`;
+    ? `Browse ${deptName} on 081 Food & Beverage — Eccellenze Napoletane. Authentic Italian gourmet food, certified cold chain delivery.`
+    : `Esplora la selezione di ${deptName} su 081 Food & Beverage — Eccellenze Napoletane. Gastronomia d'eccellenza italiana e spedizione refrigerata.`;
 
   const deptUrl = selectedDept !== "tutti"
     ? `https://alimentari.it/reparto?dept=${selectedDept}`
@@ -91,7 +94,7 @@ export async function generateMetadata({
       title,
       description,
       url: deptUrl,
-      siteName: "Alimentari",
+      siteName: "081 Food & Beverage",
       locale: locale === "en" ? "en_US" : "it_IT",
       type: "website",
     },

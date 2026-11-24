@@ -44,6 +44,19 @@ export function ProductModal({
 
   if (!product) return null;
 
+  const isAvailable =
+    product.available === false
+      ? false
+      : typeof product.stock === "number" && product.stock <= 0
+      ? false
+      : product.available === true
+      ? true
+      : typeof product.stock === "number"
+      ? product.stock > 0
+      : true;
+  const maxStock =
+    typeof product.stock === "number" && product.stock > 0 ? product.stock : undefined;
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -170,14 +183,20 @@ export function ProductModal({
               <div className="pt-6 border-t border-border mt-6 flex gap-4 items-center select-none">
                 {quantityInCart === 0 ? (
                   <button
-                    onClick={() => onQuantityChange(product.id, 1)}
+                    onClick={() => {
+                      if (!isAvailable) return;
+                      onQuantityChange(product.id, 1);
+                    }}
+                    disabled={!isAvailable}
                     className={cn(
-                      "flex-1 h-12 bg-primary text-primary-foreground hover:bg-primary/95 font-semibold text-sm rounded-lg flex items-center justify-center gap-2 select-none shadow-sm transition-all duration-200",
-                      "active:scale-[0.98] active:bg-primary/90 btn-touch-active"
+                      "flex-1 h-12 font-semibold text-sm rounded-lg flex items-center justify-center gap-2 select-none transition-all duration-200",
+                      isAvailable
+                        ? "bg-primary text-primary-foreground hover:bg-primary/95 shadow-sm active:scale-[0.98] active:bg-primary/90 btn-touch-active cursor-pointer"
+                        : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
                     )}
                   >
                     <ShoppingBag className="w-4.5 h-4.5 stroke-[2.5]" />
-                    {t("pdp.addToCart")}
+                    {!isAvailable ? t("pdp.soldOut") : t("pdp.addToCart")}
                   </button>
                 ) : (
                   <div className="flex-grow flex items-center justify-between gap-4">
@@ -185,6 +204,7 @@ export function ProductModal({
                     <QuantitySelector
                       value={quantityInCart}
                       onChange={(qty) => onQuantityChange(product.id, qty)}
+                      max={maxStock}
                     />
                   </div>
                 )}

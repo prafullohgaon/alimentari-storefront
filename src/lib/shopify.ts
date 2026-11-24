@@ -8,7 +8,7 @@
  * - NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN / SHOPIFY_STOREFRONT_ACCESS_TOKEN
  */
 
-import { Product } from "./data";
+import { Product, ProductVariant } from "./data";
 
 function getShopifyConfig() {
   const domain =
@@ -37,6 +37,47 @@ export class ShopifyNetworkError extends Error {
   }
 }
 
+export function isInventoryOrDynamicShopifyQuery(query: string): boolean {
+  const normalized = query || "";
+  if (
+    normalized.includes("cartCreate") ||
+    normalized.includes("cartLines") ||
+    normalized.includes("cartBuyerIdentity") ||
+    normalized.includes("cartDiscount") ||
+    normalized.includes("cartNote") ||
+    normalized.includes("cartAttributes") ||
+    normalized.includes("getCart")
+  ) {
+    return true;
+  }
+  if (
+    normalized.includes("customerAccessToken") ||
+    normalized.includes("customerCreate") ||
+    normalized.includes("customerRecover") ||
+    normalized.includes("customerReset") ||
+    normalized.includes("customerAddress") ||
+    normalized.includes("customerDefaultAddress") ||
+    normalized.includes("customerUpdate") ||
+    normalized.includes("getCustomer")
+  ) {
+    return true;
+  }
+  if (
+    normalized.includes("quantityAvailable") ||
+    normalized.includes("availableForSale") ||
+    normalized.includes("GetProductByHandle") ||
+    normalized.includes("GetProductInventoryByHandle") ||
+    normalized.includes("GetProducts") ||
+    normalized.includes("GetCollectionProducts") ||
+    normalized.includes("GetProductRecommendations") ||
+    normalized.includes("SearchProducts") ||
+    normalized.includes("SearchProductByTerm")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 // GraphQL Fetch Helper
 export async function shopifyFetch<T>(
   query: string,
@@ -50,23 +91,38 @@ export async function shopifyFetch<T>(
   }
   try {
     const isServer = typeof window === "undefined";
-    const isCartOperation =
-      query.includes("cartCreate") ||
-      query.includes("cartLines") ||
-      query.includes("cartBuyerIdentity") ||
-      query.includes("cartDiscount") ||
-      query.includes("getCart");
+    const optionsWithNext = options as RequestInit & {
+      next?: { revalidate?: number | false; tags?: string[] };
+    };
+    const callerRequestedNoStore =
+      options.cache === "no-store" ||
+      options.cache === "no-cache" ||
+      optionsWithNext.next?.revalidate === 0;
+    const callerProvidedExplicitCache =
+      options.cache !== undefined || optionsWithNext.next !== undefined;
 
-    const fetchOptions: RequestInit = {
+    const shouldBypassCache =
+      callerRequestedNoStore ||
+      (!callerProvidedExplicitCache && isInventoryOrDynamicShopifyQuery(query));
+
+    const { next: callerNext, ...restOptions } = optionsWithNext;
+
+    const fetchOptions: RequestInit & {
+      next?: { revalidate?: number | false; tags?: string[] };
+    } = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-Shopify-Storefront-Access-Token": accessToken,
       },
       body: JSON.stringify({ query, variables }),
-      cache: isCartOperation ? "no-store" : "default",
-      ...(isServer && !isCartOperation ? { next: { revalidate: 900 } } : {}),
-      ...options,
+      ...restOptions,
+      cache: shouldBypassCache ? "no-store" : (restOptions.cache ?? "default"),
+      ...(!shouldBypassCache && isServer
+        ? { next: callerNext ?? { revalidate: 900 } }
+        : !shouldBypassCache && callerNext
+        ? { next: callerNext }
+        : {}),
     };
     const res = await fetch(endpoint, fetchOptions);
 
@@ -98,52 +154,295 @@ export async function shopifyFetch<T>(
   }
 }
 
+export function cleanVariantUnitTitle(title?: string | null): string {
+  if (!title || typeof title !== "string") return "";
+  const trimmed = title.trim();
+  const lower = trimmed.toLowerCase();
+  if (
+    !trimmed ||
+    lower === "default title" ||
+    lower === "default" ||
+    lower === "title" ||
+    lower.startsWith("default title")
+  ) {
+    return "";
+  }
+  return trimmed;
+}
+
+export function isProductVariantAvailable(
+  variant: ProductVariant | null | undefined,
+  fallbackProductAvailable?: boolean
+): boolean {
+  if (!variant) return false;
+  if (variant.available === false) return false;
+  if (typeof variant.stock === "number" && variant.stock <= 0) return false;
+  if (variant.available === true) return true;
+  if (typeof variant.stock === "number") return variant.stock > 0;
+  return fallbackProductAvailable !== false;
+}
+
+export function getDefaultProductVariant(
+  variants: ProductVariant[] | undefined,
+  fallbackProductAvailable?: boolean
+): ProductVariant | null {
+  if (!variants || variants.length === 0) return null;
+  const firstAvailable = variants.find((v) =>
+    isProductVariantAvailable(v, fallbackProductAvailable)
+  );
+  return firstAvailable || variants[0] || null;
+}
+
+export function getInitialProductOptions(product: Product): Record<string, string> {
+  const opts: Record<string, string> = {};
+  const defaultVariant = getDefaultProductVariant(product.variants, product.available);
+  if (defaultVariant && defaultVariant.selectedOptions.length > 0) {
+    defaultVariant.selectedOptions.forEach((o) => {
+      opts[o.name] = o.value;
+    });
+  } else if (product.options && product.options.length > 0) {
+    product.options.forEach((opt) => {
+      if (opt.values && opt.values.length > 0) {
+        opts[opt.name] = opt.values[0];
+      }
+    });
+  }
+  return opts;
+}
+
+export interface ResolvedVariantState {
+  currentVariant: ProductVariant | null;
+  isUnmatchedCombination: boolean;
+  displayPrice: number;
+  displayComparePrice: number | undefined;
+  displaySku: string | undefined;
+  displayStock: number | null;
+  isAvailable: boolean;
+  maxStock: number | undefined;
+  selectedVariantId: string | undefined;
+  displayUnit: string;
+}
+
+export function resolveSelectedVariantState(
+  product: Product,
+  selectedOptionsState: Record<string, string>
+): ResolvedVariantState {
+  const hasVariants = Boolean(product.variants && product.variants.length > 0);
+  const selectedKeys = Object.keys(selectedOptionsState || {});
+
+  let currentVariant: ProductVariant | null = null;
+  let isUnmatchedCombination = false;
+
+  if (hasVariants && product.variants) {
+    if (selectedKeys.length === 0) {
+      const singleNoOptionsVariant =
+        product.variants.length === 1 && product.variants[0].selectedOptions.length === 0
+          ? product.variants[0]
+          : null;
+      currentVariant =
+        singleNoOptionsVariant ||
+        getDefaultProductVariant(product.variants, product.available);
+    } else {
+      const matched = product.variants.find(
+        (v) =>
+          v.selectedOptions.length > 0 &&
+          v.selectedOptions.every((o) => selectedOptionsState[o.name] === o.value) &&
+          selectedKeys.every((key) =>
+            v.selectedOptions.some((o) => o.name === key && o.value === selectedOptionsState[key])
+          )
+      );
+      if (matched) {
+        currentVariant = matched;
+      } else {
+        currentVariant = null;
+        isUnmatchedCombination = true;
+      }
+    }
+  }
+
+  if (isUnmatchedCombination) {
+    const selectedOptionValues = selectedKeys
+      .map((k) => selectedOptionsState[k])
+      .filter(Boolean)
+      .join(" / ");
+    return {
+      currentVariant: null,
+      isUnmatchedCombination: true,
+      displayPrice: product.price,
+      displayComparePrice: undefined,
+      displaySku: undefined,
+      displayStock: null,
+      isAvailable: false,
+      maxStock: undefined,
+      selectedVariantId: undefined,
+      displayUnit: selectedOptionValues || product.unit || "",
+    };
+  }
+
+  const displayPrice = currentVariant ? currentVariant.price : product.price;
+  const displayComparePrice = currentVariant
+    ? currentVariant.originalPrice
+    : product.originalPrice;
+  const displaySku = currentVariant ? currentVariant.sku : product.sku;
+  const displayStock: number | null = currentVariant
+    ? currentVariant.stock
+    : product.stock ?? null;
+
+  const isAvailable = currentVariant
+    ? isProductVariantAvailable(currentVariant, product.available)
+    : product.available === false
+    ? false
+    : typeof product.stock === "number" && product.stock <= 0
+    ? false
+    : product.available === true
+    ? true
+    : typeof product.stock === "number"
+    ? product.stock > 0
+    : true;
+
+  const maxStock =
+    typeof displayStock === "number" && displayStock > 0 ? displayStock : undefined;
+  const selectedVariantId = currentVariant
+    ? currentVariant.id
+    : !hasVariants
+    ? product.variantId || undefined
+    : undefined;
+
+  const variantUnit = currentVariant ? cleanVariantUnitTitle(currentVariant.title) : "";
+  const displayUnit = variantUnit || cleanVariantUnitTitle(product.unit);
+
+  return {
+    currentVariant,
+    isUnmatchedCombination: false,
+    displayPrice,
+    displayComparePrice,
+    displaySku,
+    displayStock,
+    isAvailable,
+    maxStock,
+    selectedVariantId,
+    displayUnit,
+  };
+}
+
+export function buildProductJsonLd(product: Product, handle: string) {
+  const defaultVariant = getDefaultProductVariant(product.variants, product.available);
+  const hasVariants = Boolean(product.variants && product.variants.length > 0);
+  const isPurchasable = hasVariants
+    ? isProductVariantAvailable(defaultVariant, product.available)
+    : product.available === false
+    ? false
+    : typeof product.stock === "number" && product.stock <= 0
+    ? false
+    : product.available === true
+    ? true
+    : typeof product.stock === "number"
+    ? product.stock > 0
+    : true;
+
+  const offerPrice = defaultVariant ? defaultVariant.price : product.price;
+  const offerSku =
+    (defaultVariant?.sku && defaultVariant.sku.trim()) ||
+    (product.sku && product.sku.trim()) ||
+    `AL-${product.id}`;
+
+  const resolvedAvailability = isPurchasable
+    ? "https://schema.org/InStock"
+    : "https://schema.org/OutOfStock";
+
+  const hasValidOfferPrice = Number.isFinite(offerPrice) && offerPrice > 0;
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    image: defaultVariant?.image?.url || product.imageUrl,
+    description:
+      product.description ||
+      `Acquista ${product.name} su 081 Food & Beverage — Eccellenze Napoletane.`,
+    sku: offerSku,
+    brand: {
+      "@type": "Brand",
+      name: product.brand || "081 Food & Beverage",
+    },
+    ...(hasValidOfferPrice
+      ? {
+          offers: {
+            "@type": "Offer",
+            url: `https://alimentari.it/prodotto/${handle}`,
+            priceCurrency: "EUR",
+            price: offerPrice,
+            sku: offerSku,
+            itemCondition: "https://schema.org/NewCondition",
+            availability: resolvedAvailability,
+          },
+        }
+      : {}),
+  };
+}
+
 /// Convert a Shopify GraphQL Product Node into our clean local Product shape
-function mapShopifyToLocalProduct(node: any): Product {
-  const price = parseFloat(node.priceRange?.minVariantPrice?.amount || "0");
-  const originalPrice = node.compareAtPriceRange?.minVariantPrice?.amount
+export function mapShopifyToLocalProduct(node: any): Product {
+  const minPrice = parseFloat(node.priceRange?.minVariantPrice?.amount || "0");
+  const minComparePrice = node.compareAtPriceRange?.minVariantPrice?.amount
     ? parseFloat(node.compareAtPriceRange.minVariantPrice.amount)
     : undefined;
 
   // Extract custom unit or brand metafields, falling back to tags
   const brand = node.vendor || "Alimentari Artigiani";
-  const rawUnitTitle = node.variants?.nodes?.[0]?.title;
-  const unit = (rawUnitTitle && !rawUnitTitle.toLowerCase().includes("default title") && rawUnitTitle.toLowerCase() !== "default")
-    ? rawUnitTitle
-    : undefined;
-
 
   // Map images
-  const images = node.images?.nodes?.map((img: any) => ({
-    url: img.url,
-    altText: img.altText || undefined,
-  })) || [];
+  const images =
+    node.images?.nodes?.map((img: any) => ({
+      url: img.url,
+      altText: img.altText || undefined,
+    })) || [];
 
   // Map options
-  const options = node.options?.map((opt: any) => ({
-    name: opt.name,
-    values: opt.values,
-  })) || [];
+  const options =
+    node.options?.map((opt: any) => ({
+      name: opt.name,
+      values: opt.values,
+    })) || [];
 
   // Map variants
-  const variants = node.variants?.nodes?.map((v: any) => {
-    const vPrice = parseFloat(v.price?.amount || v.priceRange?.minVariantPrice?.amount || "0");
-    const vComparePrice = v.compareAtPrice?.amount ? parseFloat(v.compareAtPrice.amount) : undefined;
-    return {
-      id: v.id,
-      title: v.title,
-      sku: v.sku || "",
-      price: vPrice,
-      originalPrice: vComparePrice && vComparePrice > vPrice ? vComparePrice : undefined,
-      stock: v.quantityAvailable || 0,
-      available: v.availableForSale ?? true,
-      selectedOptions: v.selectedOptions?.map((o: any) => ({
-        name: o.name,
-        value: o.value,
-      })) || [],
-      image: v.image ? { url: v.image.url, altText: v.image.altText || undefined } : undefined,
-    };
-  }) || [];
+  const variants: ProductVariant[] =
+    node.variants?.nodes?.map((v: any) => {
+      const hasExplicitVariantPrice =
+        v.price?.amount !== undefined && v.price?.amount !== null && v.price?.amount !== "";
+      const vPrice = hasExplicitVariantPrice
+        ? parseFloat(v.price.amount)
+        : parseFloat(v.priceRange?.minVariantPrice?.amount || String(minPrice));
+      const vComparePrice = v.compareAtPrice?.amount
+        ? parseFloat(v.compareAtPrice.amount)
+        : undefined;
+      const vStock =
+        typeof v.quantityAvailable === "number" && Number.isFinite(v.quantityAvailable)
+          ? v.quantityAvailable
+          : null;
+      const vAvailable =
+        typeof v.availableForSale === "boolean" ? v.availableForSale : undefined;
+      return {
+        id: v.id,
+        title: v.title || "",
+        sku: v.sku || "",
+        price: Number.isFinite(vPrice) ? vPrice : 0,
+        originalPrice:
+          vComparePrice && Number.isFinite(vComparePrice) && vComparePrice > vPrice
+            ? vComparePrice
+            : undefined,
+        stock: vStock,
+        available: vAvailable,
+        selectedOptions:
+          v.selectedOptions?.map((o: any) => ({
+            name: o.name,
+            value: o.value,
+          })) || [],
+        image: v.image
+          ? { url: v.image.url, altText: v.image.altText || undefined }
+          : undefined,
+      };
+    }) || [];
 
   // Map metafields safely without fake defaults
   const ratingVal = node.rating?.value ? parseFloat(node.rating.value) : undefined;
@@ -156,32 +455,76 @@ function mapShopifyToLocalProduct(node: any): Product {
   const proteinVal = node.protein?.value || undefined;
   const sodiumVal = node.sodium?.value || undefined;
 
-  const nutrition = (caloriesVal || fatVal || carbsVal || proteinVal || sodiumVal) ? {
-    calories: caloriesVal || "N/A",
-    fat: fatVal || "N/A",
-    carbs: carbsVal || "N/A",
-    protein: proteinVal || "N/A",
-    sodium: sodiumVal || "N/A",
-  } : undefined;
+  const nutrition =
+    caloriesVal || fatVal || carbsVal || proteinVal || sodiumVal
+      ? {
+          calories: caloriesVal || "N/A",
+          fat: fatVal || "N/A",
+          carbs: carbsVal || "N/A",
+          protein: proteinVal || "N/A",
+          sodium: sodiumVal || "N/A",
+        }
+      : undefined;
+
+  const defaultVariant = getDefaultProductVariant(variants, node.availableForSale);
+  const defaultVariantIsAvailable = defaultVariant
+    ? isProductVariantAvailable(defaultVariant, node.availableForSale)
+    : false;
+
+  const resolvedPrice = defaultVariant ? defaultVariant.price : minPrice;
+  const resolvedOriginalPrice = defaultVariant
+    ? defaultVariant.originalPrice
+    : minComparePrice && minComparePrice > minPrice
+    ? minComparePrice
+    : undefined;
+  const resolvedUnit = defaultVariant ? cleanVariantUnitTitle(defaultVariant.title) : "";
+  const resolvedStock: number | null = defaultVariant ? defaultVariant.stock : null;
+  const resolvedSku =
+    defaultVariant?.sku ||
+    (node.handle ? `AL-${String(node.handle).toUpperCase()}` : "");
+
+  // Authoritative availability for the mapped default variant:
+  // If variants were returned, top-level `available` must reflect whether `defaultVariant`
+  // itself is purchasable (and never true if `node.availableForSale === false` or if all
+  // returned variants in the subset are unavailable).
+  const productAvailable: boolean | undefined =
+    node.availableForSale === false
+      ? false
+      : defaultVariant
+      ? defaultVariantIsAvailable
+      : typeof node.availableForSale === "boolean"
+      ? node.availableForSale
+      : undefined;
+
+  const resolvedImageUrl =
+    defaultVariant?.image?.url ||
+    node.featuredImage?.url ||
+    node.images?.nodes?.[0]?.url ||
+    "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
 
   return {
     id: node.id,
-    variantId: node.variants?.nodes?.[0]?.id || undefined,
+    variantId: defaultVariant?.id || undefined,
     handle: node.handle || undefined,
     name: node.title,
-    price: price,
-    originalPrice: originalPrice && originalPrice > price ? originalPrice : undefined,
-    unit: unit,
-    imageUrl: node.featuredImage?.url || node.images?.nodes?.[0]?.url || "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop",
+    price: resolvedPrice,
+    originalPrice: resolvedOriginalPrice,
+    unit: resolvedUnit,
+    imageUrl: resolvedImageUrl,
     category: node.collections?.nodes?.[0]?.title || "",
     rating: ratingVal,
     tags: node.tags || [],
-    isOrganic: node.tags?.includes("Bio") || node.title?.toLowerCase().includes("bio") || false,
+    isOrganic:
+      node.tags?.includes("Bio") || node.title?.toLowerCase().includes("bio") || false,
     brand: brand,
-    dietary: node.tags?.includes("Gluten Free") ? "Gluten Free" : node.tags?.includes("Vegan") ? "Vegan" : undefined,
-    stock: node.variants?.nodes?.[0]?.quantityAvailable || 0,
-    available: node.availableForSale ?? (node.variants?.nodes?.[0]?.availableForSale ?? true),
-    sku: node.variants?.nodes?.[0]?.sku || `AL-${node.handle?.toUpperCase()}`,
+    dietary: node.tags?.includes("Gluten Free")
+      ? "Gluten Free"
+      : node.tags?.includes("Vegan")
+      ? "Vegan"
+      : undefined,
+    stock: resolvedStock,
+    available: productAvailable,
+    sku: resolvedSku,
     origin: originVal,
     description: node.description || "",
     descriptionHtml: node.descriptionHtml || undefined,
@@ -202,7 +545,216 @@ export function getProductHandle(product: Product): string {
     .replace(/(^-|-$)/g, "");
 }
 
+export interface VariantInventorySnapshot {
+  id: string;
+  available?: boolean;
+  stock: number | null;
+}
+
+export interface ProductInventorySnapshot {
+  productId: string;
+  handle: string;
+  available?: boolean;
+  variants: VariantInventorySnapshot[];
+}
+
+function areVariantArraysInventoryEqual(
+  prevVariants?: ProductVariant[],
+  nextVariants?: ProductVariant[]
+): boolean {
+  if (prevVariants === nextVariants) return true;
+  if (!prevVariants || !nextVariants) return false;
+  if (prevVariants.length !== nextVariants.length) return false;
+  for (let i = 0; i < prevVariants.length; i++) {
+    const a = prevVariants[i];
+    const b = nextVariants[i];
+    if (
+      a.id !== b.id ||
+      a.stock !== b.stock ||
+      a.available !== b.available ||
+      a.price !== b.price ||
+      a.originalPrice !== b.originalPrice
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Safely merges fresh inventory data (from `getProductInventoryByHandle` or a fresh `Product`)
+ * into an existing `Product` without mutating prices, variant IDs, titles, or active option structures.
+ * Returns the exact same `product` reference if no stock or availability values changed.
+ */
+export function mergeProductInventory(
+  product: Product,
+  freshSource: ProductInventorySnapshot | Product | null | undefined
+): Product {
+  if (!freshSource) return product;
+
+  const isSnapshot = "productId" in freshSource;
+  const sourceId = isSnapshot ? freshSource.productId : freshSource.id;
+  if (sourceId && product.id && sourceId !== product.id) {
+    return product;
+  }
+
+  const freshProductAvailable = freshSource.available;
+  const sourceVariants: VariantInventorySnapshot[] = isSnapshot
+    ? freshSource.variants
+    : (freshSource.variants || []).map((v) => ({
+        id: v.id,
+        available: v.available,
+        stock: v.stock,
+      }));
+
+  let variantsChanged = false;
+  let updatedVariants = product.variants;
+
+  if (product.variants && product.variants.length > 0 && sourceVariants.length > 0) {
+    const byId = new Map<string, VariantInventorySnapshot>();
+    sourceVariants.forEach((sv) => {
+      if (sv.id) byId.set(sv.id, sv);
+    });
+
+    const nextVariants = product.variants.map((v) => {
+      const freshVar = byId.get(v.id);
+      if (!freshVar) return v;
+      const nextStock = freshVar.stock;
+      const nextAvailable =
+        freshVar.available !== undefined ? freshVar.available : v.available;
+      if (v.stock === nextStock && v.available === nextAvailable) {
+        return v;
+      }
+      variantsChanged = true;
+      return {
+        ...v,
+        stock: nextStock,
+        available: nextAvailable,
+      };
+    });
+
+    if (variantsChanged) {
+      updatedVariants = nextVariants;
+    }
+  }
+
+  const defaultVariant = getDefaultProductVariant(
+    updatedVariants,
+    freshProductAvailable !== undefined ? freshProductAvailable : product.available
+  );
+  const defaultVariantIsAvailable = defaultVariant
+    ? isProductVariantAvailable(
+        defaultVariant,
+        freshProductAvailable !== undefined ? freshProductAvailable : product.available
+      )
+    : false;
+
+  const nextStock: number | null = defaultVariant
+    ? defaultVariant.stock
+    : ! isSnapshot && "stock" in freshSource && freshSource.stock !== undefined
+    ? freshSource.stock
+    : product.stock ?? null;
+
+  const nextAvailable: boolean | undefined =
+    freshProductAvailable === false
+      ? false
+      : defaultVariant
+      ? defaultVariantIsAvailable
+      : freshProductAvailable !== undefined
+      ? freshProductAvailable
+      : product.available;
+
+  const nextVariantId = defaultVariant?.id || product.variantId;
+  const nextPrice = defaultVariant ? defaultVariant.price : product.price;
+  const nextOriginalPrice = defaultVariant
+    ? defaultVariant.originalPrice
+    : product.originalPrice;
+  const nextUnit = defaultVariant
+    ? cleanVariantUnitTitle(defaultVariant.title)
+    : product.unit;
+  const nextSku = defaultVariant?.sku || product.sku;
+
+  if (
+    !variantsChanged &&
+    product.stock === nextStock &&
+    product.available === nextAvailable &&
+    product.variantId === nextVariantId &&
+    product.price === nextPrice &&
+    product.originalPrice === nextOriginalPrice &&
+    product.unit === nextUnit &&
+    product.sku === nextSku
+  ) {
+    return product;
+  }
+
+  return {
+    ...product,
+    variantId: nextVariantId,
+    price: nextPrice,
+    originalPrice: nextOriginalPrice,
+    unit: nextUnit,
+    sku: nextSku,
+    stock: nextStock,
+    available: nextAvailable,
+    variants: updatedVariants,
+  };
+}
+
+/**
+ * Synchronizes a product array with fresh products from Shopify while preserving object references
+ * for unchanged items (and returning `currentProducts` unchanged if nothing changed) so React
+ * components and memoized `ProductCard` instances do not re-render unnecessarily.
+ */
+export function synchronizeProductsList(
+  currentProducts: Product[],
+  freshProducts: Product[]
+): Product[] {
+  if (currentProducts === freshProducts) return currentProducts;
+  if (!freshProducts) return currentProducts;
+  if (currentProducts.length !== freshProducts.length) return freshProducts;
+
+  let anyChanged = false;
+  const merged = freshProducts.map((freshProd, idx) => {
+    const prevProd = currentProducts[idx];
+    if (
+      prevProd &&
+      prevProd.id === freshProd.id &&
+      prevProd.variantId === freshProd.variantId &&
+      prevProd.price === freshProd.price &&
+      prevProd.originalPrice === freshProd.originalPrice &&
+      prevProd.unit === freshProd.unit &&
+      prevProd.name === freshProd.name &&
+      prevProd.imageUrl === freshProd.imageUrl &&
+      prevProd.stock === freshProd.stock &&
+      prevProd.available === freshProd.available &&
+      areVariantArraysInventoryEqual(prevProd.variants, freshProd.variants)
+    ) {
+      return prevProd;
+    }
+    anyChanged = true;
+    return freshProd;
+  });
+
+  return anyChanged ? merged : currentProducts;
+}
+
 // --- SHOPIFY STOREFRONT API IMPLEMENTATIONS ---
+
+const LISTING_VARIANT_FIELDS = `
+  variants(first: 10) {
+    nodes {
+      id
+      title
+      sku
+      availableForSale
+      quantityAvailable
+      price { amount currencyCode }
+      compareAtPrice { amount currencyCode }
+      selectedOptions { name value }
+      image { url altText }
+    }
+  }
+`;
 
 // 1. Fetch products list (simple backward-compatible array return)
 export async function getProducts(first = 12, locale?: string): Promise<Product[]> {
@@ -217,6 +769,7 @@ export async function getProducts(first = 12, locale?: string): Promise<Product[
           description
           vendor
           tags
+          availableForSale
           priceRange {
             minVariantPrice { amount currencyCode }
           }
@@ -226,9 +779,7 @@ export async function getProducts(first = 12, locale?: string): Promise<Product[
           images(first: 1) {
             nodes { url altText }
           }
-          variants(first: 1) {
-            nodes { id title sku quantityAvailable }
-          }
+          ${LISTING_VARIANT_FIELDS}
           collections(first: 1) {
             nodes { title }
           }
@@ -237,7 +788,11 @@ export async function getProducts(first = 12, locale?: string): Promise<Product[
     }
   `;
 
-  const response = await shopifyFetch<{ products: { nodes: any[] } }>(query, { first });
+  const response = await shopifyFetch<{ products: { nodes: any[] } }>(
+    query,
+    { first },
+    { cache: "no-store" }
+  );
   if (response?.data?.products?.nodes) {
     return response.data.products.nodes.map(mapShopifyToLocalProduct);
   }
@@ -282,6 +837,7 @@ export async function getProductsWithPagination({
           description
           vendor
           tags
+          availableForSale
           priceRange {
             minVariantPrice { amount currencyCode }
           }
@@ -291,9 +847,7 @@ export async function getProductsWithPagination({
           images(first: 1) {
             nodes { url altText }
           }
-          variants(first: 1) {
-            nodes { id title sku quantityAvailable }
-          }
+          ${LISTING_VARIANT_FIELDS}
           collections(first: 1) {
             nodes { title }
           }
@@ -310,7 +864,7 @@ export async function getProductsWithPagination({
         endCursor: string | null;
       };
     };
-  }>(query, { first, after, sortKey, reverse });
+  }>(query, { first, after, sortKey, reverse }, { cache: "no-store" });
 
   if (response?.data?.products) {
     const productsData = response.data.products;
@@ -333,6 +887,117 @@ export async function getProductsWithPagination({
   };
 }
 
+export interface ProductSeoMetadata {
+  id: string;
+  name: string;
+  handle: string;
+  description: string;
+  imageUrl: string;
+}
+
+/**
+ * Fetches slow-changing SEO metadata for a product handle (title, description, image).
+ * Uses a 15-minute revalidation window (`revalidate: 900`) because it does not include
+ * inventory or availability fields, avoiding duplicate uncached Storefront API calls during `generateMetadata`.
+ */
+export async function getProductSeoMetadata(
+  handle: string,
+  locale?: string
+): Promise<ProductSeoMetadata | null> {
+  const langDirective = getShopifyLanguageDirective(locale);
+  const query = `
+    query GetProductSeoMetadata($handle: String!) ${langDirective} {
+      product(handle: $handle) {
+        id
+        title
+        handle
+        description
+        featuredImage {
+          url
+        }
+        images(first: 1) {
+          nodes { url }
+        }
+      }
+    }
+  `;
+
+  const response = await shopifyFetch<{ product: any }>(
+    query,
+    { handle },
+    { next: { revalidate: 900 } } as RequestInit
+  );
+
+  const node = response?.data?.product;
+  if (!node) return null;
+
+  return {
+    id: node.id,
+    name: node.title || "",
+    handle: node.handle || handle,
+    description: node.description || "",
+    imageUrl:
+      node.featuredImage?.url ||
+      node.images?.nodes?.[0]?.url ||
+      "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop",
+  };
+}
+
+/**
+ * Lightweight uncached query that fetches only variant inventory (`quantityAvailable`) and
+ * availability (`availableForSale`) for a product handle.
+ */
+export async function getProductInventoryByHandle(
+  handle: string,
+  locale?: string
+): Promise<ProductInventorySnapshot | null> {
+  if (!handle) return null;
+  const langDirective = getShopifyLanguageDirective(locale);
+  const query = `
+    query GetProductInventoryByHandle($handle: String!) ${langDirective} {
+      product(handle: $handle) {
+        id
+        handle
+        availableForSale
+        variants(first: 50) {
+          nodes {
+            id
+            availableForSale
+            quantityAvailable
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await shopifyFetch<{ product: any }>(
+    query,
+    { handle },
+    { cache: "no-store" }
+  );
+
+  const node = response?.data?.product;
+  if (!node) return null;
+
+  const variants: VariantInventorySnapshot[] =
+    node.variants?.nodes?.map((v: any) => ({
+      id: v.id,
+      available: typeof v.availableForSale === "boolean" ? v.availableForSale : undefined,
+      stock:
+        typeof v.quantityAvailable === "number" && Number.isFinite(v.quantityAvailable)
+          ? v.quantityAvailable
+          : null,
+    })) || [];
+
+  return {
+    productId: node.id,
+    handle: node.handle || handle,
+    available:
+      typeof node.availableForSale === "boolean" ? node.availableForSale : undefined,
+    variants,
+  };
+}
+
 // 2. Fetch single product details using URL handle
 export async function getProductByHandle(handle: string, locale?: string): Promise<Product | null> {
   const langDirective = getShopifyLanguageDirective(locale);
@@ -346,6 +1011,7 @@ export async function getProductByHandle(handle: string, locale?: string): Promi
         descriptionHtml
         vendor
         tags
+        availableForSale
         priceRange {
           minVariantPrice { amount currencyCode }
         }
@@ -404,14 +1070,22 @@ export async function getProductByHandle(handle: string, locale?: string): Promi
   `;
 
   console.log("[getProductByHandle] Requested handle:", handle);
-  let response = await shopifyFetch<{ product: any }>(query, { handle });
+  let response = await shopifyFetch<{ product: any }>(
+    query,
+    { handle },
+    { cache: "no-store" }
+  );
 
   // Fallback 1: Handle normalization for decimal numbers (e.g. "-1-5l" -> "-15l")
   if (!response?.data?.product && handle.includes("-")) {
     const altHandle = handle.replace(/-(\d+)-(\d+)/g, "-$1$2");
     if (altHandle !== handle) {
       console.log("[getProductByHandle] Retrying with normalized handle:", altHandle);
-      response = await shopifyFetch<{ product: any }>(query, { handle: altHandle });
+      response = await shopifyFetch<{ product: any }>(
+        query,
+        { handle: altHandle },
+        { cache: "no-store" }
+      );
     }
   }
 
@@ -428,11 +1102,19 @@ export async function getProductByHandle(handle: string, locale?: string): Promi
         }
       }
     `;
-    const searchRes = await shopifyFetch<{ products: { nodes: Array<{ handle: string }> } }>(searchQuery, { query: searchTerm });
+    const searchRes = await shopifyFetch<{ products: { nodes: Array<{ handle: string }> } }>(
+      searchQuery,
+      { query: searchTerm },
+      { cache: "no-store" }
+    );
     const matchedHandle = searchRes?.data?.products?.nodes?.[0]?.handle;
     if (matchedHandle) {
       console.log("[getProductByHandle] Resolved real handle via search fallback:", matchedHandle);
-      response = await shopifyFetch<{ product: any }>(query, { handle: matchedHandle });
+      response = await shopifyFetch<{ product: any }>(
+        query,
+        { handle: matchedHandle },
+        { cache: "no-store" }
+      );
     }
   }
 
@@ -456,6 +1138,7 @@ export async function getProductRecommendations(productId: string, locale?: stri
         description
         vendor
         tags
+        availableForSale
         priceRange {
           minVariantPrice { amount currencyCode }
         }
@@ -469,9 +1152,7 @@ export async function getProductRecommendations(productId: string, locale?: stri
         images(first: 1) {
           nodes { url altText }
         }
-        variants(first: 1) {
-          nodes { id title sku quantityAvailable }
-        }
+        ${LISTING_VARIANT_FIELDS}
         collections(first: 1) {
           nodes { title }
         }
@@ -480,7 +1161,11 @@ export async function getProductRecommendations(productId: string, locale?: stri
   `;
 
   try {
-    const response = await shopifyFetch<{ productRecommendations: any[] }>(query, { productId });
+    const response = await shopifyFetch<{ productRecommendations: any[] }>(
+      query,
+      { productId },
+      { cache: "no-store" }
+    );
     if (response?.data?.productRecommendations) {
       return response.data.productRecommendations.map(mapShopifyToLocalProduct);
     }
@@ -530,6 +1215,7 @@ export async function getCollectionProducts(
             description
             vendor
             tags
+            availableForSale
             priceRange {
               minVariantPrice { amount currencyCode }
             }
@@ -539,9 +1225,7 @@ export async function getCollectionProducts(
             images(first: 1) {
               nodes { url altText }
             }
-            variants(first: 1) {
-              nodes { id title sku quantityAvailable }
-            }
+            ${LISTING_VARIANT_FIELDS}
           }
         }
       }
@@ -558,13 +1242,17 @@ export async function getCollectionProducts(
         };
       };
     };
-  }>(query, {
-    handle: collectionHandle,
-    first,
-    after,
-    sortKey,
-    reverse,
-  });
+  }>(
+    query,
+    {
+      handle: collectionHandle,
+      first,
+      after,
+      sortKey,
+      reverse,
+    },
+    { cache: "no-store" }
+  );
   console.log('SHOPIFY FETCH RESPONSE:', response);
   console.log('response?.data:', response?.data);
   console.log('response?.data?.collection:', response?.data?.collection);
@@ -605,21 +1293,27 @@ export async function searchProducts(searchTerm: string, locale?: string): Promi
           handle
           description
           tags
+          availableForSale
           priceRange {
+            minVariantPrice { amount }
+          }
+          compareAtPriceRange {
             minVariantPrice { amount }
           }
           images(first: 1) {
             nodes { url }
           }
-          variants(first: 1) {
-            nodes { id title quantityAvailable }
-          }
+          ${LISTING_VARIANT_FIELDS}
         }
       }
     }
   `;
 
-  const response = await shopifyFetch<{ products: { nodes: any[] } }>(query, { query: `title:*${searchTerm}* OR tag:*${searchTerm}*` });
+  const response = await shopifyFetch<{ products: { nodes: any[] } }>(
+    query,
+    { query: `title:*${searchTerm}* OR tag:*${searchTerm}*` },
+    { cache: "no-store" }
+  );
   if (response?.data?.products?.nodes) {
     return response.data.products.nodes.map(mapShopifyToLocalProduct);
   }
@@ -668,6 +1362,7 @@ export async function searchProductsWithPagination({
           description
           vendor
           tags
+          availableForSale
           priceRange {
             minVariantPrice { amount currencyCode }
           }
@@ -677,9 +1372,7 @@ export async function searchProductsWithPagination({
           images(first: 1) {
             nodes { url altText }
           }
-          variants(first: 1) {
-            nodes { id title sku quantityAvailable }
-          }
+          ${LISTING_VARIANT_FIELDS}
           collections(first: 1) {
             nodes { title }
           }
@@ -701,7 +1394,11 @@ export async function searchProductsWithPagination({
         endCursor: string | null;
       };
     };
-  }>(query, { first, after, query: builtQuery, sortKey, reverse });
+  }>(
+    query,
+    { first, after, query: builtQuery, sortKey, reverse },
+    { cache: "no-store" }
+  );
 
   if (response?.data?.products) {
     const productsData = response.data.products;
@@ -725,12 +1422,30 @@ export async function searchProductsWithPagination({
 }
 
 // --- CART API MUTATIONS & INTEGRATION ---
+export interface ShopifyDiscountAllocation {
+  discountedAmount: { amount: string; currencyCode?: string };
+}
+
+export interface ShopifyCartUserError {
+  code?: string;
+  field?: string[];
+  message: string;
+}
+
 export interface ShopifyCartLine {
   id: string;
   quantity: number;
+  discountAllocations?: ShopifyDiscountAllocation[];
   merchandise: {
     id: string;
+    title?: string;
+    sku?: string | null;
+    availableForSale?: boolean;
+    quantityAvailable?: number | null;
     price: { amount: string; currencyCode?: string };
+    compareAtPrice?: { amount: string; currencyCode?: string } | null;
+    selectedOptions?: Array<{ name: string; value: string }>;
+    image?: { url: string; altText?: string | null } | null;
     product: {
       id: string;
       title: string;
@@ -750,6 +1465,8 @@ export interface ShopifyCart {
     totalTaxAmount?: { amount: string; currencyCode?: string } | null;
   };
   discountCodes?: Array<{ code: string; applicable: boolean }>;
+  discountAllocations?: ShopifyDiscountAllocation[];
+  userErrors?: ShopifyCartUserError[];
   lines: ShopifyCartLine[];
 }
 
@@ -766,14 +1483,33 @@ const CART_FRAGMENT = `
     code
     applicable
   }
+  discountAllocations {
+    discountedAmount { amount currencyCode }
+  }
   lines(first: 100) {
     nodes {
       id
       quantity
+      discountAllocations {
+        discountedAmount { amount currencyCode }
+      }
       merchandise {
         ... on ProductVariant {
           id
+          title
+          sku
+          availableForSale
+          quantityAvailable
           price { amount currencyCode }
+          compareAtPrice { amount currencyCode }
+          selectedOptions {
+            name
+            value
+          }
+          image {
+            url
+            altText
+          }
           product {
             id
             title
@@ -796,7 +1532,8 @@ function formatCartResponse(c: any): ShopifyCart {
     checkoutUrl: c.checkoutUrl,
     totalQuantity,
     cost: c.cost || { subtotalAmount: { amount: "0.00" }, totalAmount: { amount: "0.00" } },
-    discountCodes: c.discountCodes || [],
+    discountCodes: Array.isArray(c.discountCodes) ? c.discountCodes : [],
+    discountAllocations: Array.isArray(c.discountAllocations) ? c.discountAllocations : [],
     lines,
   };
 
@@ -919,17 +1656,35 @@ export async function cartCreate(
     },
   };
 
-  const response = await shopifyFetch<{ cartCreate: { cart: any; userErrors: any[] } }>(query, {
+  const response = await shopifyFetch<{ cartCreate: { cart: any; userErrors: ShopifyCartUserError[] } }>(query, {
     input: inputPayload,
   });
 
   if (response?.data?.cartCreate?.cart) {
     const formatted = formatCartResponse(response.data.cartCreate.cart);
+    const userErrors = response.data.cartCreate.userErrors;
+    if (Array.isArray(userErrors) && userErrors.length > 0) {
+      formatted.userErrors = userErrors;
+    }
     console.log(`[SHOPIFY DIAGNOSTIC] [${timestamp}] EXIT cartCreate`, {
       returnedCartId: formatted.id,
       returnedCheckoutUrl: formatted.checkoutUrl,
     });
     return formatted;
+  }
+
+  const createErrors = response?.data?.cartCreate?.userErrors;
+  if (Array.isArray(createErrors) && createErrors.length > 0) {
+    return {
+      id: "",
+      checkoutUrl: "",
+      totalQuantity: 0,
+      cost: { subtotalAmount: { amount: "0.00" }, totalAmount: { amount: "0.00" } },
+      discountCodes: [],
+      discountAllocations: [],
+      userErrors: createErrors,
+      lines: [],
+    };
   }
 
   console.log(`[SHOPIFY DIAGNOSTIC] [${timestamp}] EXIT cartCreate - Failed`, {
@@ -966,15 +1721,33 @@ export async function cartLinesAdd(
     }
   `;
 
-  const response = await shopifyFetch<{ cartLinesAdd: { cart: any } }>(query, { cartId, lines });
+  const response = await shopifyFetch<{ cartLinesAdd: { cart: any; userErrors?: ShopifyCartUserError[] } }>(query, { cartId, lines });
   if (response?.data?.cartLinesAdd?.cart) {
     const formatted = formatCartResponse(response.data.cartLinesAdd.cart);
+    const userErrors = response.data.cartLinesAdd.userErrors;
+    if (Array.isArray(userErrors) && userErrors.length > 0) {
+      formatted.userErrors = userErrors;
+    }
     console.log(`[SHOPIFY DIAGNOSTIC] [${timestamp}] EXIT cartLinesAdd`, {
       requestedCartId: cartId,
       returnedCartId: formatted.id,
       checkoutUrl: formatted.checkoutUrl,
     });
     return formatted;
+  }
+
+  const addErrors = response?.data?.cartLinesAdd?.userErrors;
+  if (Array.isArray(addErrors) && addErrors.length > 0) {
+    return {
+      id: "",
+      checkoutUrl: "",
+      totalQuantity: 0,
+      cost: { subtotalAmount: { amount: "0.00" }, totalAmount: { amount: "0.00" } },
+      discountCodes: [],
+      discountAllocations: [],
+      userErrors: addErrors,
+      lines: [],
+    };
   }
 
   console.log(`[SHOPIFY DIAGNOSTIC] [${timestamp}] EXIT cartLinesAdd - Failed`, { cartId });
@@ -1001,9 +1774,28 @@ export async function cartLinesUpdate(
     }
   `;
 
-  const response = await shopifyFetch<{ cartLinesUpdate: { cart: any } }>(query, { cartId, lines });
+  const response = await shopifyFetch<{ cartLinesUpdate: { cart: any; userErrors?: ShopifyCartUserError[] } }>(query, { cartId, lines });
   if (response?.data?.cartLinesUpdate?.cart) {
-    return formatCartResponse(response.data.cartLinesUpdate.cart);
+    const formatted = formatCartResponse(response.data.cartLinesUpdate.cart);
+    const userErrors = response.data.cartLinesUpdate.userErrors;
+    if (Array.isArray(userErrors) && userErrors.length > 0) {
+      formatted.userErrors = userErrors;
+    }
+    return formatted;
+  }
+
+  const updateErrors = response?.data?.cartLinesUpdate?.userErrors;
+  if (Array.isArray(updateErrors) && updateErrors.length > 0) {
+    return {
+      id: "",
+      checkoutUrl: "",
+      totalQuantity: 0,
+      cost: { subtotalAmount: { amount: "0.00" }, totalAmount: { amount: "0.00" } },
+      discountCodes: [],
+      discountAllocations: [],
+      userErrors: updateErrors,
+      lines: [],
+    };
   }
   return null;
 }
@@ -1028,9 +1820,14 @@ export async function cartLinesRemove(
     }
   `;
 
-  const response = await shopifyFetch<{ cartLinesRemove: { cart: any } }>(query, { cartId, lineIds });
+  const response = await shopifyFetch<{ cartLinesRemove: { cart: any; userErrors?: ShopifyCartUserError[] } }>(query, { cartId, lineIds });
   if (response?.data?.cartLinesRemove?.cart) {
-    return formatCartResponse(response.data.cartLinesRemove.cart);
+    const formatted = formatCartResponse(response.data.cartLinesRemove.cart);
+    const userErrors = response.data.cartLinesRemove.userErrors;
+    if (Array.isArray(userErrors) && userErrors.length > 0) {
+      formatted.userErrors = userErrors;
+    }
+    return formatted;
   }
   return null;
 }
@@ -1165,10 +1962,14 @@ export async function syncCartDeliveryPreferences(
 // 7. Update Discount Codes on Cart
 export async function cartDiscountCodesUpdate(
   cartId: string,
-  discountCodes: string[]
+  discountCodes: string[],
+  locale?: string
 ): Promise<ShopifyCart | null> {
+  if (!cartId) return null;
+
+  const langDirective = getCartLanguageDirective(locale);
   const query = `
-    mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!) {
+    mutation cartDiscountCodesUpdate($cartId: ID!, $discountCodes: [String!]!) ${langDirective} {
       cartDiscountCodesUpdate(cartId: $cartId, discountCodes: $discountCodes) {
         cart {
           ${CART_FRAGMENT}
@@ -1182,10 +1983,39 @@ export async function cartDiscountCodesUpdate(
     }
   `;
 
-  const response = await shopifyFetch<{ cartDiscountCodesUpdate: { cart: any } }>(query, { cartId, discountCodes });
-  if (response?.data?.cartDiscountCodesUpdate?.cart) {
-    return formatCartResponse(response.data.cartDiscountCodesUpdate.cart);
+  const response = await shopifyFetch<{
+    cartDiscountCodesUpdate: {
+      cart: any;
+      userErrors?: ShopifyCartUserError[];
+    };
+  }>(query, { cartId, discountCodes });
+
+  if (response?.errors && response.errors.length > 0 && !response?.data?.cartDiscountCodesUpdate?.cart) {
+    return null;
   }
+
+  const payload = response?.data?.cartDiscountCodesUpdate;
+  if (payload?.cart) {
+    const formatted = formatCartResponse(payload.cart);
+    if (Array.isArray(payload.userErrors) && payload.userErrors.length > 0) {
+      formatted.userErrors = payload.userErrors;
+    }
+    return formatted;
+  }
+
+  if (Array.isArray(payload?.userErrors) && payload.userErrors.length > 0) {
+    return {
+      id: cartId,
+      checkoutUrl: "",
+      totalQuantity: 0,
+      cost: { subtotalAmount: { amount: "0.00" }, totalAmount: { amount: "0.00" } },
+      discountCodes: [],
+      discountAllocations: [],
+      userErrors: payload.userErrors,
+      lines: [],
+    };
+  }
+
   return null;
 }
 
@@ -1377,16 +2207,18 @@ export async function createSocialCustomer(
   lastName: string,
   email: string
 ): Promise<{ customerId: string | null; accessToken: string | null; success: boolean; error: string | null }> {
-  console.log("[createSocialCustomer] Reconciling OAuth user with Shopify:", email);
+  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET;
+  if (!secret || secret.trim().length === 0) {
+    console.error("[createSocialCustomer] Missing required NEXTAUTH_SECRET environment variable.");
+    throw new Error("Server authentication configuration error: missing required secret.");
+  }
 
   const crypto = await import("crypto");
-  const secret = process.env.NEXTAUTH_SECRET || process.env.AUTH_SECRET || "alimentari-social-auth-fallback-secret";
   const deterministicPassword = `SocialUser_${crypto.createHmac("sha256", secret).update(email.toLowerCase().trim()).digest("hex").slice(0, 16)}!`;
 
   // 1. Try login first in case customer already exists
   const loginRes = await customerLogin(email, deterministicPassword);
   if (loginRes.token) {
-    console.log("[createSocialCustomer] Existing OAuth customer logged in successfully.");
     const profile = await getCustomerProfile(loginRes.token);
     return { customerId: profile?.id || null, accessToken: loginRes.token, success: true, error: null };
   }
@@ -1526,6 +2358,9 @@ export interface ShopifyOrderLineItem {
   title: string;
   quantity: number;
   variantId?: string;
+  variantTitle?: string;
+  available?: boolean;
+  stock?: number | null;
   price: { amount: string; currencyCode?: string };
   imageUrl?: string;
   productHandle?: string;
@@ -1629,6 +2464,9 @@ export async function getCustomerOrders(accessToken: string): Promise<ShopifyOrd
                 quantity
                 variant {
                   id
+                  title
+                  availableForSale
+                  quantityAvailable
                   price {
                     amount
                     currencyCode
@@ -1659,15 +2497,34 @@ export async function getCustomerOrders(accessToken: string): Promise<ShopifyOrd
 
   if (response?.data?.customer?.orders?.nodes) {
     return response.data.customer.orders.nodes.map((order: any) => {
-      const lineItems: ShopifyOrderLineItem[] = (order.lineItems?.nodes || []).map((node: any) => ({
-        title: node.title || node.variant?.product?.title || "Prodotto",
-        quantity: node.quantity || 1,
-        variantId: node.variant?.id || undefined,
-        price: node.variant?.price || { amount: "0.00", currencyCode: "EUR" },
-        imageUrl: node.variant?.image?.url || node.variant?.product?.featuredImage?.url || undefined,
-        productHandle: node.variant?.product?.handle || undefined,
-        productId: node.variant?.product?.id || undefined,
-      }));
+      const lineItems: ShopifyOrderLineItem[] = (order.lineItems?.nodes || []).map((node: any) => {
+        const rawVariantTitle = typeof node.variant?.title === "string" ? node.variant.title.trim() : "";
+        const cleanVariantTitle =
+          rawVariantTitle &&
+          !rawVariantTitle.toLowerCase().includes("default title") &&
+          rawVariantTitle.toLowerCase() !== "default"
+            ? rawVariantTitle
+            : undefined;
+        const available = node.variant ? node.variant.availableForSale !== false : false;
+        const stock =
+          typeof node.variant?.quantityAvailable === "number" &&
+          Number.isFinite(node.variant.quantityAvailable)
+            ? Math.max(0, node.variant.quantityAvailable)
+            : null;
+
+        return {
+          title: node.title || node.variant?.product?.title || "Prodotto",
+          quantity: node.quantity || 1,
+          variantId: node.variant?.id || undefined,
+          variantTitle: cleanVariantTitle,
+          available,
+          stock,
+          price: node.variant?.price || { amount: "0.00", currencyCode: "EUR" },
+          imageUrl: node.variant?.image?.url || node.variant?.product?.featuredImage?.url || undefined,
+          productHandle: node.variant?.product?.handle || undefined,
+          productId: node.variant?.product?.id || undefined,
+        };
+      });
 
       const trackingInfo = (order.successfulFulfillments || []).flatMap((fulfillment: any) =>
         (fulfillment.trackingInfo || []).map((info: any) => ({
@@ -2003,9 +2860,26 @@ export async function customerUpdate(accessToken: string, customerInput: any): P
 // 7b. updateCustomerPassword
 export async function updateCustomerPassword(
   accessToken: string,
-  newPassword: string
+  newPassword: string,
+  currentPassword: string,
+  fallbackEmail?: string
 ): Promise<{ success: boolean; error: string | null }> {
-  return customerUpdate(accessToken, { password: newPassword });
+  if (!accessToken || !currentPassword || !newPassword) {
+    return { success: false, error: "Credenziali mancanti per l'aggiornamento della password." };
+  }
+
+  const profile = await getCustomerProfile(accessToken);
+  const authoritativeEmail = profile?.email || fallbackEmail;
+  if (!authoritativeEmail) {
+    return { success: false, error: "Impossibile verificare l'identità dell'account." };
+  }
+
+  const verifyRes = await customerLogin(authoritativeEmail, currentPassword);
+  if (verifyRes.error || !verifyRes.token) {
+    return { success: false, error: "CURRENT_PASSWORD_INCORRECT" };
+  }
+
+  return customerUpdate(verifyRes.token, { password: newPassword });
 }
 
 // 8. getCustomerCartMetafield (Storefront API read for cross-browser active cart ID)

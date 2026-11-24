@@ -18,7 +18,7 @@ export function ShippingClient() {
   }, [initLocale]);
 
   useEffect(() => {
-    document.title = locale === "en" ? "Shipping Information | Alimentari" : "Spedizioni | Alimentari";
+    document.title = locale === "en" ? "Shipping Information | 081 Food & Beverage" : "Spedizioni | 081 Food & Beverage";
   }, [locale]);
 
   return (

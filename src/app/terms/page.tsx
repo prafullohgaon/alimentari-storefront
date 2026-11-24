@@ -8,8 +8,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const locale = cookieStore.get("alimentari_locale")?.value === "en" ? "en" : "it";
   const title = locale === "en" ? "Terms & Conditions" : "Termini e Condizioni";
   const description = locale === "en"
-    ? "Read the General Terms and Conditions of Sale governing purchases on Alimentari."
-    : "Leggi le Condizioni Generali di Vendita che disciplinano gli acquisti su Alimentari.";
+    ? "Read the General Terms and Conditions of Sale governing purchases on 081 Food & Beverage."
+    : "Leggi le Condizioni Generali di Vendita che disciplinano gli acquisti su 081 Food & Beverage.";
 
   return {
     title,

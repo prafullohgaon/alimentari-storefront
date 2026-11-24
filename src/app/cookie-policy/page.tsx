@@ -8,8 +8,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const locale = cookieStore.get("alimentari_locale")?.value === "en" ? "en" : "it";
   const title = "Cookie Policy";
   const description = locale === "en"
-    ? "Learn about the cookies and tracking technologies used on Alimentari."
-    : "Scopri i cookie e le tecnologie di tracciamento utilizzate su Alimentari.";
+    ? "Learn about the cookies and tracking technologies used on 081 Food & Beverage."
+    : "Scopri i cookie e le tecnologie di tracciamento utilizzate su 081 Food & Beverage.";
 
   return {
     title,

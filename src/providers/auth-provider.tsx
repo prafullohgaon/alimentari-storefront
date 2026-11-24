@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from "react";
 import { SessionProvider, useSession } from "next-auth/react";
 import { useCartStore } from "@/store/cart";
+import { useAuthStore } from "@/store/auth";
 
 function CartAuthSync() {
   const { data: session, status } = useSession();
@@ -12,16 +13,12 @@ function CartAuthSync() {
     const isOffline = typeof window !== "undefined" && !window.navigator.onLine;
 
     if (status === "unauthenticated") {
+      if (!isOffline && useAuthStore.getState().token) {
+        useAuthStore.getState().logout();
+      }
       if (syncedUserIdRef.current !== null) {
         if (isOffline) {
-          if (process.env.NODE_ENV === "development") {
-            console.log("[AUTH DIAGNOSTIC] Offline status detected; skipping switchToGuestMode trigger.");
-          }
           return;
-        }
-        if (process.env.NODE_ENV === "development") {
-          const timestamp = new Date().toISOString();
-          console.log(`[AUTH DIAGNOSTIC] [${timestamp}] Unauthenticated detected -> Calling switchToGuestMode`);
         }
         syncedUserIdRef.current = null;
         useCartStore.getState().switchToGuestMode();
@@ -29,16 +26,17 @@ function CartAuthSync() {
       return;
     }
 
+    if (status === "authenticated" && session?.accessToken) {
+      if (useAuthStore.getState().token !== session.accessToken) {
+        useAuthStore.getState().login(session.accessToken);
+      }
+    }
+
     if (status === "authenticated" && session?.accessToken && session.user?.id) {
       const currentUserId = session.user.id;
-      const flowId = `CartFlow #${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const timestamp = new Date().toISOString();
 
       if (syncedUserIdRef.current !== currentUserId) {
         syncedUserIdRef.current = currentUserId;
-        if (process.env.NODE_ENV === "development") {
-          console.log(`[AUTH DIAGNOSTIC] [${timestamp}] [${flowId}] START Auth Sync Cycle for User: ${currentUserId}`);
-        }
         useCartStore
           .getState()
           .mergeGuestCart(
@@ -46,13 +44,8 @@ function CartAuthSync() {
             session.user.email || undefined,
             currentUserId
           )
-          .then(() => {
-            if (process.env.NODE_ENV === "development") {
-              console.log(`[AUTH DIAGNOSTIC] [${new Date().toISOString()}] [${flowId}] FINISHED mergeGuestCart`);
-            }
-          })
           .catch((err) => {
-            console.error(`[AUTH DIAGNOSTIC] [${new Date().toISOString()}] [${flowId}] ERROR mergeGuestCart:`, err);
+            console.error("[AuthProvider] Error merging guest cart:", err);
           });
       }
     }

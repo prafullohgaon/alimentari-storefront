@@ -14,18 +14,28 @@ export interface CartItem {
   quantity: number;
 }
 
-import { useCartStore } from "@/store/cart";
+import {
+  useCartStore,
+  getCartItemKey,
+  selectCartSubtotal,
+  selectCartDiscount,
+  selectCartTotal,
+} from "@/store/cart";
 import { useUiStore } from "@/store/ui";
-import { useAuthStore } from "@/store/auth";
 import { cartStorage } from "@/lib/cart-storage";
 import { useTranslation } from "@/hooks/use-translation";
+import { useSession } from "next-auth/react";
 
 const FREE_SHIPPING_THRESHOLD = 50;
 
 function CartDrawerContent({ onClose }: { onClose: () => void }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const items = useCartStore((state) => state.items);
   const isSyncing = useCartStore((state) => state.isSyncing);
+  const discountCode = useCartStore((state) => state.discountCode);
+  const subtotal = useCartStore(selectCartSubtotal);
+  const discountAmount = useCartStore(selectCartDiscount);
+  const total = useCartStore(selectCartTotal);
   const onQuantityChange = useCartStore((state) => state.updateQuantity);
   const onRemoveItem = useCartStore((state) => state.removeItem);
 
@@ -43,9 +53,8 @@ function CartDrawerContent({ onClose }: { onClose: () => void }) {
     onRemoveItem(productId);
   };
 
-  const subtotal = items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const remainingForFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-  const isFreeShipping = remainingForFreeShipping === 0;
+  const isFreeShipping = subtotal > 0 && remainingForFreeShipping === 0;
   const progressPercent = Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100);
 
   const drawerRef = useFocusTrap({ active: true, onEscape: onClose });
@@ -156,11 +165,18 @@ function CartDrawerContent({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             items.map((item) => {
-              const isRemoving = removingProductId === item.product.id && isSyncing;
+              const itemKey = getCartItemKey(item);
+              const isRemoving = removingProductId === itemKey && isSyncing;
+              const maxStock =
+                typeof item.product.stock === "number" &&
+                Number.isFinite(item.product.stock) &&
+                item.product.stock > 0
+                  ? item.product.stock
+                  : undefined;
 
               return (
                 <div
-                  key={item.product.id}
+                  key={itemKey}
                   className={cn(
                     "flex items-center gap-3 p-3 bg-secondary/30 rounded-lg border border-border/40 select-none group transition-all duration-200",
                     isRemoving && "opacity-50 pointer-events-none bg-red-50/20 border-red-200/50"
@@ -188,7 +204,8 @@ function CartDrawerContent({ onClose }: { onClose: () => void }) {
                     <div className="mt-2 flex items-center justify-between">
                       <QuantitySelector
                         value={item.quantity}
-                        onChange={(qty) => onQuantityChange(item.product.id, qty)}
+                        max={maxStock}
+                        onChange={(qty) => onQuantityChange(itemKey, qty)}
                         size="sm"
                       />
                       <span className="text-xs font-extrabold text-foreground">
@@ -197,8 +214,8 @@ function CartDrawerContent({ onClose }: { onClose: () => void }) {
                     </div>
                   </div>
                   <button
-                    onClick={() => handleRemove(item.product.id)}
-                    disabled={isRemoving || isSyncing}
+                    onClick={() => handleRemove(itemKey)}
+                    disabled={isRemoving}
                     className="w-11 h-11 flex items-center justify-center rounded-full hover:bg-red-50 text-muted hover:text-red-600 transition-colors btn-touch-active flex-shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
                     aria-label={t("cartDrawer.removeItemAria")}
                   >
@@ -242,13 +259,19 @@ function CartDrawerContent({ onClose }: { onClose: () => void }) {
                 <span>{t("cartDrawer.subtotal")}</span>
                 <span>€{subtotal.toFixed(2)}</span>
               </div>
+              {discountCode && discountAmount > 0 && (
+                <div className="flex justify-between text-xs text-success font-bold">
+                  <span>{locale === "it" ? `Sconto (${discountCode})` : `Discount (${discountCode})`}</span>
+                  <span>- €{discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-xs text-muted font-medium">
                 <span>{t("cartDrawer.shipping")}</span>
                 <span>{isFreeShipping ? <strong className="text-primary font-bold">{t("cartDrawer.free")}</strong> : t("cartDrawer.calculatedAtCheckout")}</span>
               </div>
               <div className="flex justify-between text-sm font-bold text-foreground pt-1.5 border-t border-border/60">
                 <span>{t("cartDrawer.estimatedTotal")}</span>
-                <span className="text-base font-extrabold text-primary">€{subtotal.toFixed(2)}</span>
+                <span className="text-base font-extrabold text-primary">€{total.toFixed(2)}</span>
               </div>
             </div>
 
@@ -282,20 +305,19 @@ export function CartDrawer() {
 
 function CheckoutButton({ items }: { items: CartItem[] }) {
   const { t, locale } = useTranslation();
+  const { data: session, status } = useSession();
   const [isRedirecting, setIsRedirecting] = React.useState(false);
 
   const handleCheckout = async () => {
+    if (status === "loading") return;
+
     setIsRedirecting(true);
     const cartId = useCartStore.getState().cartId;
     const checkoutUrlState = useCartStore.getState().checkoutUrl;
-    const token = useAuthStore.getState().token;
-
-    console.log("[REACT_CHECKOUT_CLICK] Triggered in Cart Drawer.");
-    console.log("[REACT_CHECKOUT_CLICK] token:", token ? "Authenticated" : "Unauthenticated");
+    const isAuthenticated = status === "authenticated" && Boolean(session?.user);
 
     // 1. Guest Authentication Gate
-    if (!token) {
-      console.log("[REACT_CHECKOUT_CLICK] Guest user detected. Saving checkout intent & redirecting to /accedi...");
+    if (!isAuthenticated) {
       cartStorage.setPendingCheckoutIntent(true);
       useUiStore.getState().closeCart();
       setIsRedirecting(false);
@@ -308,22 +330,18 @@ function CheckoutButton({ items }: { items: CartItem[] }) {
       let targetUrl = checkoutUrlState;
 
       if (!targetUrl || !targetUrl.startsWith("https://")) {
-        console.log("[REACT_CHECKOUT_CLICK] Generating checkout URL via checkoutCart()...");
         const { checkoutCart } = await import("@/lib/shopify");
         targetUrl = await checkoutCart(cartId, items, locale);
       }
 
       if (targetUrl && targetUrl.startsWith("https://")) {
         cartStorage.clearPendingCheckoutIntent();
-        console.log("[REACT_CHECKOUT_CLICK] EXECUTING BROWSER REDIRECT TO:", targetUrl);
         window.location.assign(targetUrl);
       } else {
-        console.error("[REACT_CHECKOUT_CLICK] Invalid redirect URL generated:", targetUrl);
         alert(t("cartDrawer.redirectError"));
         setIsRedirecting(false);
       }
-    } catch (error) {
-      console.error("[REACT_CHECKOUT_CLICK] Exception during checkout:", error);
+    } catch {
       setIsRedirecting(false);
     }
   };

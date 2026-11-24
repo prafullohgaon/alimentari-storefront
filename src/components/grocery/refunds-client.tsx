@@ -18,7 +18,7 @@ export function RefundsClient() {
   }, [initLocale]);
 
   useEffect(() => {
-    document.title = locale === "en" ? "Returns & Refunds | Alimentari" : "Resi & Rimborsi | Alimentari";
+    document.title = locale === "en" ? "Returns & Refunds | 081 Food & Beverage" : "Resi & Rimborsi | 081 Food & Beverage";
   }, [locale]);
 
   return (

@@ -75,8 +75,9 @@ export const authOptions: NextAuthOptions = {
             if (socialRes.customerId) {
               user.id = socialRes.customerId;
             }
-          } catch (err) {
-            console.error("[NextAuth signIn callback] Social customer creation warning:", err);
+          } catch {
+            console.error("[NextAuth signIn callback] Social customer reconciliation failed.");
+            return false;
           }
         }
       }

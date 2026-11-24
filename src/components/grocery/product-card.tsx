@@ -64,12 +64,30 @@ function ProductCardComponent({
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
 
+  const isAvailable =
+    product.available === false
+      ? false
+      : typeof product.stock === "number" && product.stock <= 0
+      ? false
+      : product.available === true
+      ? true
+      : typeof product.stock === "number"
+      ? product.stock > 0
+      : true;
+  const maxStock =
+    typeof product.stock === "number" && product.stock > 0 ? product.stock : undefined;
+
   const cleanUnit = product.unit && !isDefaultVariantTitle(product.unit) ? product.unit : undefined;
 
   return (
     <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-xs hover:shadow-md transition-all duration-300 flex flex-col h-full overflow-hidden select-none">
       {/* Top Badges */}
       <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 pointer-events-none">
+        {!isAvailable && (
+          <Badge className="bg-slate-800 text-white border-none text-[9px] font-extrabold py-0.5 px-2 rounded-md shadow-xs">
+            {t("pdp.soldOut")}
+          </Badge>
+        )}
         {product.isOrganic && (
           <Badge className="bg-emerald-700 text-white border-none text-[9px] font-extrabold py-0.5 px-2 rounded-md shadow-xs">
             🌱 BIO
@@ -182,9 +200,19 @@ function ProductCardComponent({
           {quantityInCart === 0 ? (
             <button
               type="button"
-              onClick={() => onQuantityChange(product.id, 1)}
-              className="w-9 h-9 min-h-[36px] min-w-[36px] bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl flex items-center justify-center flex-shrink-0 active:scale-95 transition-all shadow-xs cursor-pointer"
-              aria-label={t("pdp.addToCart")}
+              onClick={() => {
+                if (!isAvailable) return;
+                onQuantityChange(product.id, 1);
+              }}
+              disabled={!isAvailable}
+              className={cn(
+                "w-9 h-9 min-h-[36px] min-w-[36px] rounded-xl flex items-center justify-center flex-shrink-0 transition-all shadow-xs",
+                isAvailable
+                  ? "bg-emerald-700 hover:bg-emerald-800 text-white active:scale-95 cursor-pointer"
+                  : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+              )}
+              aria-label={!isAvailable ? t("pdp.soldOut") : t("pdp.addToCart")}
+              title={!isAvailable ? t("pdp.soldOut") : t("pdp.addToCart")}
             >
               <Plus className="w-4.5 h-4.5 stroke-[2.5]" />
             </button>
@@ -192,6 +220,7 @@ function ProductCardComponent({
             <QuantitySelector
               value={quantityInCart}
               onChange={(qty) => onQuantityChange(product.id, qty)}
+              max={maxStock}
               className="h-9 w-full max-w-[100px]"
               size="sm"
             />
@@ -207,7 +236,12 @@ export const ProductCard = React.memo(
   (prevProps, nextProps) =>
     prevProps.quantityInCart === nextProps.quantityInCart &&
     prevProps.product.id === nextProps.product.id &&
+    prevProps.product.variantId === nextProps.product.variantId &&
     prevProps.product.price === nextProps.product.price &&
+    prevProps.product.originalPrice === nextProps.product.originalPrice &&
+    prevProps.product.unit === nextProps.product.unit &&
     prevProps.product.name === nextProps.product.name &&
-    prevProps.product.imageUrl === nextProps.product.imageUrl
+    prevProps.product.imageUrl === nextProps.product.imageUrl &&
+    prevProps.product.available === nextProps.product.available &&
+    prevProps.product.stock === nextProps.product.stock
 );

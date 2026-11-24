@@ -36,6 +36,19 @@ export async function middleware(request: NextRequest) {
   // Redirect authenticated users away from /accedi
   if (pathname === "/accedi") {
     if (token) {
+      const redirectParam = request.nextUrl.searchParams.get("redirect");
+      const callbackUrlParam = request.nextUrl.searchParams.get("callbackUrl");
+      if (redirectParam === "checkout" || callbackUrlParam === "/checkout") {
+        return NextResponse.redirect(new URL("/checkout", request.url));
+      }
+      if (
+        callbackUrlParam &&
+        callbackUrlParam.startsWith("/") &&
+        !callbackUrlParam.startsWith("//") &&
+        callbackUrlParam !== "/accedi"
+      ) {
+        return NextResponse.redirect(new URL(callbackUrlParam, request.url));
+      }
       return NextResponse.redirect(new URL("/account", request.url));
     }
   }

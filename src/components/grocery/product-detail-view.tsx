@@ -34,9 +34,20 @@ import { SearchOverlay } from "@/components/grocery/search-overlay";
 import { Notification } from "@/components/grocery/notification";
 import { Footer } from "@/components/grocery/footer";
 import { ReviewSection } from "@/components/grocery/review-section";
-import { getProductHandle } from "@/lib/shopify";
-import { useCartStore } from "@/store/cart";
-import { useUiStore } from "@/store/ui";
+import {
+  getProductHandle,
+  getInitialProductOptions,
+  resolveSelectedVariantState,
+  isProductVariantAvailable,
+  getProductInventoryByHandle,
+  mergeProductInventory,
+  synchronizeProductsList,
+} from "@/lib/shopify";
+import {
+  useCartStore,
+  findCartItemByIdentifier,
+  getCartItemKey,
+} from "@/store/cart";
 import { useWishlistStore } from "@/store/wishlist";
 import { useTranslation } from "@/hooks/use-translation";
 
@@ -46,12 +57,86 @@ interface ProductDetailViewProps {
   relatedProducts: Product[];
 }
 
+const INVENTORY_REFRESH_COOLDOWN_MS = 5000;
 
-
-
-export function ProductDetailView({ product, relatedProducts }: ProductDetailViewProps) {
+export function ProductDetailView({
+  product: initialProduct,
+  relatedProducts: initialRelatedProducts,
+}: ProductDetailViewProps) {
   const router = useRouter();
   const { t, locale } = useTranslation();
+
+  const [product, setProduct] = useState<Product>(initialProduct);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>(initialRelatedProducts);
+
+  // Synchronize when parent passes a different product or refreshed server props
+  useEffect(() => {
+    setProduct((prev) =>
+      prev.id === initialProduct.id
+        ? mergeProductInventory(prev, initialProduct)
+        : initialProduct
+    );
+  }, [initialProduct]);
+
+  useEffect(() => {
+    setRelatedProducts((prev) => synchronizeProductsList(prev, initialRelatedProducts));
+  }, [initialRelatedProducts]);
+
+  // Bounded client-side inventory refresh on mount (handles Next.js Client Router Cache)
+  // and on page/tab restoration (handles returning from checkout or another tab).
+  const lastInventoryFetchRef = useRef<number>(0);
+
+  useEffect(() => {
+    let active = true;
+    const handle = initialProduct.handle || getProductHandle(initialProduct);
+    if (!handle) return;
+
+    const refreshInventory = async (force = false) => {
+      const now = Date.now();
+      if (!force && now - lastInventoryFetchRef.current < INVENTORY_REFRESH_COOLDOWN_MS) {
+        return;
+      }
+      lastInventoryFetchRef.current = now;
+      try {
+        const snapshot = await getProductInventoryByHandle(handle, locale);
+        if (active && snapshot) {
+          setProduct((prev) => mergeProductInventory(prev, snapshot));
+        }
+      } catch {
+        // Fail silently and preserve existing server-rendered product state
+      }
+    };
+
+    // Initial verification on mount in case client router cache served a prefetched payload
+    void refreshInventory(true);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshInventory(false);
+      }
+    };
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        void refreshInventory(true);
+      }
+    };
+
+    const handleWindowFocus = () => {
+      void refreshInventory(false);
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      active = false;
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [initialProduct.id, initialProduct.handle, initialProduct, locale]);
 
   // Zustand Global Cart Store integration
   const cart = useCartStore((state) => state.items);
@@ -84,56 +169,38 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
     }
   }, []);
 
-  // Options & Selected Variant state configuration
+  // Options & Selected Variant state configuration (initialized from the default available variant)
   const initialOptions = useMemo(() => {
-    const opts: Record<string, string> = {};
-    if (product.variants && product.variants.length > 0) {
-      product.variants[0].selectedOptions.forEach((o) => {
-        opts[o.name] = o.value;
-      });
-    } else if (product.options) {
-      product.options.forEach((opt) => {
-        opts[opt.name] = opt.values[0];
-      });
-    }
-    return opts;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id]);
+    return getInitialProductOptions(product);
+  }, [product]);
 
+  const [trackedProductId, setTrackedProductId] = useState(product.id);
   const [selectedOptionsState, setSelectedOptionsState] = useState<Record<string, string>>(initialOptions);
 
-  // Reset variant selections exactly once when product ID changes
-  const isFirstMount = useRef(true);
-  useEffect(() => {
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
-      return;
-    }
+  if (trackedProductId !== product.id) {
+    setTrackedProductId(product.id);
     setSelectedOptionsState(initialOptions);
     setActiveImageIndex(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id]);
+  }
 
-  const currentVariant = useMemo(() => {
-    if (!product.variants || product.variants.length === 0) return null;
-    return product.variants.find((v) => {
-      return v.selectedOptions.every((o) => selectedOptionsState[o.name] === o.value);
-    }) || product.variants[0];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product.id, selectedOptionsState]);
+  const effectiveSelectedOptions =
+    trackedProductId === product.id ? selectedOptionsState : initialOptions;
 
-  // Dynamically resolved variant values
-  const displayPrice = currentVariant ? currentVariant.price : product.price;
-  const displayComparePrice = currentVariant ? currentVariant.originalPrice : product.originalPrice;
-  const displaySku = currentVariant ? currentVariant.sku : product.sku;
-  const displayStock = currentVariant ? currentVariant.stock : (product.stock || 0);
-
-  // Authoritative Shopify availability:
-  const isAvailable = currentVariant
-    ? currentVariant.available
-    : (product.available ?? (product.stock !== undefined ? product.stock > 0 : true));
-
-  const displayUnit = currentVariant && currentVariant.title !== "Default Title" ? currentVariant.title : product.unit;
+  const {
+    currentVariant,
+    isUnmatchedCombination,
+    displayPrice,
+    displayComparePrice,
+    displaySku,
+    displayStock,
+    isAvailable,
+    maxStock,
+    selectedVariantId,
+    displayUnit,
+  } = useMemo(
+    () => resolveSelectedVariantState(product, effectiveSelectedOptions),
+    [product, effectiveSelectedOptions]
+  );
 
   // Filter out Shopify internal single-variant "Default Title" from customer UI
   const visibleOptions = useMemo(() => {
@@ -199,38 +266,84 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
   }, []);
 
   const handleQuantityChange = (productId: string, qty: number, customProduct?: Product) => {
-    const existing = useCartStore.getState().items.find((item) => item.product.id === productId);
+    const isMainProduct = productId === product.id;
+    const relatedProd = !isMainProduct
+      ? relatedProducts.find((p) => p.id === productId || p.variantId === productId)
+      : undefined;
+
+    const targetVariantId =
+      customProduct?.variantId ||
+      (isMainProduct ? selectedVariantId : relatedProd?.variantId);
+
+    const items = useCartStore.getState().items;
+    const lookupIdentifier = targetVariantId || (isMainProduct && product.variants?.length ? "" : productId);
+    const existing = lookupIdentifier
+      ? findCartItemByIdentifier(items, lookupIdentifier)
+      : undefined;
+
+    const existingKey = existing
+      ? getCartItemKey(existing)
+      : targetVariantId || productId;
 
     let productObj: Product | undefined;
     if (customProduct) {
       productObj = customProduct;
-    } else if (productId === product.id) {
+    } else if (isMainProduct) {
+      if (isUnmatchedCombination || !isAvailable) return;
       productObj = {
         ...product,
         price: displayPrice,
         originalPrice: displayComparePrice,
         sku: displaySku,
         unit: displayUnit,
-        variantId: currentVariant?.id || product.variantId || undefined
+        stock: displayStock,
+        available: isAvailable,
+        variantId: selectedVariantId,
       };
     } else {
-      productObj = relatedProducts.find((p) => p.id === productId);
-    }
-
-    if (!existing && qty === 1 && productObj) {
-      setToast({ id: String(Date.now()), product: productObj });
+      productObj = relatedProd;
     }
 
     if (qty <= 0) {
-      removeItem(productId);
-    } else if (existing) {
-      updateQuantity(productId, qty);
-    } else if (productObj) {
+      removeItem(existingKey);
+      return;
+    }
+
+    if (existing) {
+      updateQuantity(existingKey, qty);
+      return;
+    }
+
+    if (productObj) {
+      const isProdAvailable =
+        productObj.available === false
+          ? false
+          : typeof productObj.stock === "number" && productObj.stock <= 0
+          ? false
+          : productObj.available === true
+          ? true
+          : typeof productObj.stock === "number"
+          ? productObj.stock > 0
+          : true;
+      if (!isProdAvailable) return;
+
+      if (qty === 1) {
+        setToast({ id: String(Date.now()), product: productObj });
+      }
       addItem(productObj, qty);
     }
   };
 
-  const quantityInCart = cart.find((item) => item.product.id === product.id)?.quantity || 0;
+  const quantityInCart = useMemo(() => {
+    if (isUnmatchedCombination) return 0;
+    if (selectedVariantId) {
+      return findCartItemByIdentifier(cart, selectedVariantId)?.quantity || 0;
+    }
+    if (!product.variants || product.variants.length === 0) {
+      return findCartItemByIdentifier(cart, product.id)?.quantity || 0;
+    }
+    return 0;
+  }, [cart, selectedVariantId, isUnmatchedCombination, product.id, product.variants]);
 
   // Cross-sell combinations from related products
   const boughtTogetherItem = relatedProducts.length > 0 ? relatedProducts[0] : null;
@@ -243,18 +356,21 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
 
 
   const handleAddComboToCart = () => {
+    if (!isAvailable) return;
     const cartProduct = {
       ...product,
       price: displayPrice,
       originalPrice: displayComparePrice,
       sku: displaySku,
       unit: displayUnit,
-      variantId: currentVariant?.id || product.variantId || undefined
+      stock: displayStock,
+      available: isAvailable,
+      variantId: selectedVariantId,
     };
     addItem(cartProduct, 1);
-    if (boughtTogetherItem) addItem(boughtTogetherItem, 1);
-    if (boughtTogetherItem2) addItem(boughtTogetherItem2, 1);
-    useUiStore.getState().openCart();
+    if (boughtTogetherItem && boughtTogetherItem.available !== false) addItem(boughtTogetherItem, 1);
+    if (boughtTogetherItem2 && boughtTogetherItem2.available !== false) addItem(boughtTogetherItem2, 1);
+    setToast({ id: String(Date.now()), product: cartProduct });
   };
 
   // Magnifier lens coordinates on hover
@@ -470,7 +586,7 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
                     <div className="inline-flex items-center gap-1.5 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-full px-3 py-1 select-none">
                       🚫 {t("pdp.soldOut")}
                     </div>
-                  ) : displayStock > 0 && displayStock < 15 ? (
+                  ) : typeof displayStock === "number" && displayStock > 0 && displayStock < 15 ? (
                     <div className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1 select-none">
                       ⚡ {t("pdp.onlyStockLeft", { stock: displayStock })}
                     </div>
@@ -504,7 +620,9 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
                 )}
 
 
-                <span className="text-slate-400 font-mono text-[11px]">SKU: {displaySku || `AL-${product.id}`}</span>
+                <span className="text-slate-400 font-mono text-[11px]">
+                  SKU: {isUnmatchedCombination ? "—" : displaySku || `AL-${product.id}`}
+                </span>
               </div>
             </div>
 
@@ -521,24 +639,58 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
                     </span>
                     <div className="flex flex-wrap gap-2">
                       {option.values.map((value) => {
-                        const isSelected = selectedOptionsState[option.name] === value;
+                        const isSelected = effectiveSelectedOptions[option.name] === value;
+                        const candidateOptions = {
+                          ...effectiveSelectedOptions,
+                          [option.name]: value,
+                        };
+                        const candidateVariant = product.variants?.find((v) =>
+                          v.selectedOptions.every((o) => candidateOptions[o.name] === o.value)
+                        );
+                        const isOptionValueAvailable = candidateVariant
+                          ? isProductVariantAvailable(candidateVariant, product.available)
+                          : Boolean(
+                              product.variants?.some(
+                                (v) =>
+                                  v.selectedOptions.some(
+                                    (o) => o.name === option.name && o.value === value
+                                  ) && isProductVariantAvailable(v, product.available)
+                              )
+                            );
+
                         return (
                           <button
                             key={value}
+                            type="button"
                             onClick={() => {
                               setSelectedOptionsState((prev) => ({
                                 ...prev,
                                 [option.name]: value,
                               }));
                             }}
+                            aria-pressed={isSelected}
+                            title={
+                              !isOptionValueAvailable
+                                ? `${value} (${t("pdp.soldOut")})`
+                                : value
+                            }
                             className={cn(
-                              "px-3.5 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer",
-                              isSelected
+                              "px-3.5 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5",
+                              isSelected && isOptionValueAvailable
                                 ? "border-emerald-600 bg-emerald-50/80 text-emerald-800 font-bold shadow-xs"
+                                : isSelected && !isOptionValueAvailable
+                                ? "border-rose-400 bg-rose-50/70 text-rose-800 font-bold shadow-xs"
+                                : !isOptionValueAvailable
+                                ? "border-slate-200 bg-slate-50 text-slate-400 line-through hover:border-slate-300"
                                 : "border-slate-200 hover:border-emerald-400 bg-white text-slate-700"
                             )}
                           >
-                            {value}
+                            <span>{value}</span>
+                            {!isOptionValueAvailable && (
+                              <span className="text-[10px] font-bold text-rose-600 no-underline">
+                                ({t("pdp.soldOut")})
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -581,16 +733,18 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
                 {quantityInCart === 0 ? (
                   <button
                     onClick={() => {
+                      if (!isAvailable) return;
                       const cartProduct = {
                         ...product,
                         price: displayPrice,
                         originalPrice: displayComparePrice,
                         sku: displaySku,
                         unit: displayUnit,
-                        variantId: currentVariant?.id || product.variantId || undefined
+                        stock: displayStock,
+                        available: isAvailable,
+                        variantId: selectedVariantId,
                       };
                       handleQuantityChange(product.id, 1, cartProduct);
-                      useUiStore.getState().openCart();
                     }}
                     disabled={!isAvailable}
                     className={cn(
@@ -615,10 +769,13 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
                           originalPrice: displayComparePrice,
                           sku: displaySku,
                           unit: displayUnit,
-                          variantId: currentVariant?.id || product.variantId || undefined
+                          stock: displayStock,
+                          available: isAvailable,
+                          variantId: selectedVariantId,
                         };
                         handleQuantityChange(product.id, qty, cartProduct);
                       }}
+                      max={maxStock}
                       className="flex-grow justify-between h-13"
                     />
                   </div>
@@ -1028,7 +1185,8 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
               {relatedProducts.map((prod) => {
-                const cartQty = cart.find((item) => item.product.id === prod.id)?.quantity || 0;
+                const cartQty =
+                  findCartItemByIdentifier(cart, prod.variantId || prod.id)?.quantity || 0;
                 return (
                   <ProductCard
                     key={prod.id}
@@ -1070,16 +1228,18 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
             {quantityInCart === 0 ? (
               <button
                 onClick={() => {
+                  if (!isAvailable) return;
                   const cartProduct = {
                     ...product,
                     price: displayPrice,
                     originalPrice: displayComparePrice,
                     sku: displaySku,
                     unit: displayUnit,
-                    variantId: currentVariant?.id || product.variantId || undefined
+                    stock: displayStock,
+                    available: isAvailable,
+                    variantId: selectedVariantId,
                   };
                   handleQuantityChange(product.id, 1, cartProduct);
-                  useUiStore.getState().openCart();
                 }}
                 disabled={!isAvailable}
                 className={cn(
@@ -1101,10 +1261,13 @@ export function ProductDetailView({ product, relatedProducts }: ProductDetailVie
                     originalPrice: displayComparePrice,
                     sku: displaySku,
                     unit: displayUnit,
-                    variantId: currentVariant?.id || product.variantId || undefined
+                    stock: displayStock,
+                    available: isAvailable,
+                    variantId: selectedVariantId,
                   };
                   handleQuantityChange(product.id, qty, cartProduct);
                 }}
+                max={maxStock}
                 size="sm"
                 className="w-32 h-11"
               />

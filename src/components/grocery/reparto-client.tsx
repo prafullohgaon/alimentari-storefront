@@ -8,7 +8,13 @@ import { SlidersHorizontal, Check, X, ChevronRight, LayoutGrid, List, Heart, Plu
 import { Footer } from "@/components/grocery/footer";
 import { cn } from "@/lib/utils";
 import { Product } from "@/lib/data";
-import { getProductHandle, getCollectionProducts, getProductsWithPagination, searchProductsWithPagination } from "@/lib/shopify";
+import {
+  getProductHandle,
+  getCollectionProducts,
+  getProductsWithPagination,
+  searchProductsWithPagination,
+  synchronizeProductsList,
+} from "@/lib/shopify";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ProductCard } from "@/components/grocery/product-card";
@@ -21,7 +27,11 @@ import { SearchOverlay } from "@/components/grocery/search-overlay";
 import { Notification } from "@/components/grocery/notification";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { SidebarNode } from "@/types/sidebar";
-import { useCartStore, selectProductCartQuantity } from "@/store/cart";
+import {
+  useCartStore,
+  findCartItemByIdentifier,
+  selectProductCartQuantity,
+} from "@/store/cart";
 import { useWishlistStore } from "@/store/wishlist";
 import { useTranslation } from "@/hooks/use-translation";
 
@@ -52,7 +62,9 @@ function RepartoListViewCard({
   onQuickView: (p: Product) => void;
 }) {
   const { t } = useTranslation();
-  const quantityInCart = useCartStore(selectProductCartQuantity(product.id));
+  const quantityInCart = useCartStore(
+    selectProductCartQuantity(product.variantId || product.id)
+  );
   const wishlistIds = useWishlistStore((state) => state.ids);
   const toggleWishlistAction = useWishlistStore((state) => state.toggleWishlist);
   const [showSaveToList, setShowSaveToList] = useState(false);
@@ -68,6 +80,19 @@ function RepartoListViewCard({
   const discountPercent = isSale
     ? Math.round(((product.originalPrice! - product.price) / product.originalPrice!) * 100)
     : 0;
+
+  const isAvailable =
+    product.available === false
+      ? false
+      : typeof product.stock === "number" && product.stock <= 0
+      ? false
+      : product.available === true
+      ? true
+      : typeof product.stock === "number"
+      ? product.stock > 0
+      : true;
+  const maxStock =
+    typeof product.stock === "number" && product.stock > 0 ? product.stock : undefined;
 
   const cleanUnit = product.unit && !isDefaultVariantTitle(product.unit) ? product.unit : undefined;
 
@@ -174,17 +199,33 @@ function RepartoListViewCard({
 
           {quantityInCart === 0 ? (
             <button
-              onClick={() => onQuantityChange(product.id, 1)}
-              className="h-9 px-4 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer min-h-[44px] min-w-[44px]"
-              aria-label={t("pdp.addToCart")}
+              onClick={() => {
+                if (!isAvailable) return;
+                onQuantityChange(product.id, 1);
+              }}
+              disabled={!isAvailable}
+              className={cn(
+                "h-9 px-4 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all min-h-[44px] min-w-[44px]",
+                isAvailable
+                  ? "bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs active:scale-95 cursor-pointer"
+                  : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+              )}
+              aria-label={!isAvailable ? t("pdp.soldOut") : t("pdp.addToCart")}
             >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span className="hidden md:inline">{t("searchOverlay.addToCart")}</span>
+              {isAvailable ? (
+                <>
+                  <Plus className="w-4 h-4 stroke-[2.5]" />
+                  <span className="hidden md:inline">{t("searchOverlay.addToCart")}</span>
+                </>
+              ) : (
+                <span>{t("pdp.soldOut")}</span>
+              )}
             </button>
           ) : (
             <QuantitySelector
               value={quantityInCart}
               onChange={(qty) => onQuantityChange(product.id, qty)}
+              max={maxStock}
               className="h-9 w-28"
               size="sm"
             />
@@ -211,7 +252,9 @@ function RepartoGridProductCard({
   onQuantityChange: (id: string, qty: number) => void;
   onQuickView: (p: Product) => void;
 }) {
-  const quantityInCart = useCartStore(selectProductCartQuantity(product.id));
+  const quantityInCart = useCartStore(
+    selectProductCartQuantity(product.variantId || product.id)
+  );
   return (
     <ProductCard
       product={product}
@@ -323,6 +366,16 @@ export function RepartoClient({ initialProducts, initialPageInfo, categoryTree }
   const pageCursors = useRef<Record<number, string | null>>({ 1: null });
   const isFirstRender = useRef<boolean>(true);
   const prevFilters = useRef({ selectedDept, sortOption, itemsPerPage, searchQuery });
+  const lastRefreshRef = useRef<number>(0);
+
+  // Synchronize state when server-rendered initialProducts prop updates
+  useEffect(() => {
+    setProductsState((prev) => synchronizeProductsList(prev, initialProducts));
+    setHasNextPage(initialPageInfo.hasNextPage);
+    if (currentPage === 1 && initialPageInfo.endCursor) {
+      pageCursors.current[2] = initialPageInfo.endCursor;
+    }
+  }, [initialProducts, initialPageInfo.hasNextPage, initialPageInfo.endCursor, currentPage]);
 
   // Map UI sort choices to Shopify sort parameters
   const getSortParams = (option: string) => {
@@ -343,18 +396,11 @@ export function RepartoClient({ initialProducts, initialPageInfo, categoryTree }
     }
   };
 
-  // Client side refetching when searchParams or page changes
+  // Client side refetching when searchParams or page changes, plus bounded refresh on tab/page restore
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      if (currentPage === 1 && initialPageInfo.endCursor) {
-        pageCursors.current[2] = initialPageInfo.endCursor;
-      }
-      return;
-    }
-
     let active = true;
-    async function fetchCollection() {
+
+    async function fetchCollection(showLoading = true) {
       if (
         prevFilters.current.selectedDept !== selectedDept ||
         prevFilters.current.sortOption !== sortOption ||
@@ -365,7 +411,8 @@ export function RepartoClient({ initialProducts, initialPageInfo, categoryTree }
         prevFilters.current = { selectedDept, sortOption, itemsPerPage, searchQuery };
       }
 
-      setLoading(true);
+      if (showLoading) setLoading(true);
+      lastRefreshRef.current = Date.now();
       const handle = selectedDept === "tutti" ? null : selectedDept;
       const { sortKey, reverse } = getSortParams(sortOption);
       const after = pageCursors.current[currentPage] || undefined;
@@ -388,8 +435,8 @@ export function RepartoClient({ initialProducts, initialPageInfo, categoryTree }
           res = await getCollectionProducts(handle, itemsPerPage, after, sortKey, reverse, locale);
         }
 
-        if (active) {
-          setProductsState(res.products);
+        if (active && res) {
+          setProductsState((prev) => synchronizeProductsList(prev, res.products));
           setHasNextPage(res.pageInfo.hasNextPage);
           if (res.pageInfo.endCursor) {
             pageCursors.current[currentPage + 1] = res.pageInfo.endCursor;
@@ -398,32 +445,80 @@ export function RepartoClient({ initialProducts, initialPageInfo, categoryTree }
       } catch (err) {
         console.error("Failed to load collection products on filter change:", err);
       } finally {
-        if (active) setLoading(false);
+        if (active && showLoading) setLoading(false);
       }
     }
 
-    fetchCollection();
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      if (currentPage === 1 && initialPageInfo.endCursor) {
+        pageCursors.current[2] = initialPageInfo.endCursor;
+      }
+      lastRefreshRef.current = Date.now();
+    } else {
+      void fetchCollection(true);
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && Date.now() - lastRefreshRef.current >= 5000) {
+        void fetchCollection(false);
+      }
+    };
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        void fetchCollection(false);
+      }
+    };
+
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
       active = false;
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [selectedDept, currentPage, sortOption, itemsPerPage, searchQuery, initialPageInfo.endCursor, locale]);
 
 
   // Centralized Cart Handlers
   const handleQuantityChange = useCallback((productId: string, qty: number) => {
-    const existing = useCartStore.getState().items.find((item) => item.product.id === productId);
-    const productObj = productsState.find((p) => p.id === productId);
-
-    if (!existing && qty === 1 && productObj) {
-      setToast({ id: String(Date.now()), product: productObj });
-    }
+    const productObj = productsState.find(
+      (p) => p.id === productId || p.variantId === productId
+    );
+    const targetIdentifier = productObj?.variantId || productId;
+    const existing = findCartItemByIdentifier(
+      useCartStore.getState().items,
+      targetIdentifier
+    );
 
     if (qty <= 0) {
-      removeItem(productId);
-    } else if (existing) {
-      updateQuantity(productId, qty);
-    } else if (productObj) {
+      removeItem(targetIdentifier);
+      return;
+    }
+
+    if (existing) {
+      updateQuantity(targetIdentifier, qty);
+      return;
+    }
+
+    if (productObj) {
+      const isProdAvailable =
+        productObj.available === false
+          ? false
+          : typeof productObj.stock === "number" && productObj.stock <= 0
+          ? false
+          : productObj.available === true
+          ? true
+          : typeof productObj.stock === "number"
+          ? productObj.stock > 0
+          : true;
+      if (!isProdAvailable) return;
+
+      if (qty === 1) {
+        setToast({ id: String(Date.now()), product: productObj });
+      }
       addItem(productObj, qty);
     }
   }, [productsState, addItem, removeItem, updateQuantity]);

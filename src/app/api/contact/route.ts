@@ -155,7 +155,7 @@ export async function POST(request: Request) {
             <body>
               <div class="container">
                 <div class="header">
-                  <h2>Alimentari — Nuova Richiesta di Contatto</h2>
+                  <h2>081 Food & Beverage — Nuova Richiesta di Contatto</h2>
                 </div>
                 <div class="field"><span class="label">Data & Ora:</span> ${formattedDate}</div>
                 <div class="field"><span class="label">Nome:</span> ${safeNome} ${safeCognome}</div>
@@ -199,7 +199,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           from: fromEmail,
           to: safeEmail,
-          subject: "Abbiamo ricevuto la tua richiesta — Alimentari",
+          subject: "Abbiamo ricevuto la tua richiesta — 081 Food & Beverage",
           html: `
             <!DOCTYPE html>
             <html>
@@ -217,17 +217,17 @@ export async function POST(request: Request) {
               <body>
                 <div class="container">
                   <div class="header">
-                    <h2>Alimentari Gourmet Market</h2>
+                    <h2>081 Food & Beverage — Eccellenze Napoletane</h2>
                   </div>
                   <p>Ciao <strong>${safeNome}</strong>,</p>
-                  <p>grazie per aver contattato Alimentari.</p>
+                  <p>grazie per aver contattato 081 Food & Beverage.</p>
                   <p>Abbiamo ricevuto la tua richiesta e il nostro team la esaminerà il prima possibile.</p>
                   <p><strong>Oggetto:</strong> ${safeOggetto}</p>
                   <div class="message-box"><strong>Messaggio inviato:</strong><br>${safeMessaggio.replace(/\n/g, "<br>")}</div>
                   <p style="margin-top: 20px;">Ti risponderemo a questo indirizzo email.</p>
                   <div class="footer">
                     Grazie,<br>
-                    <strong>Alimentari Gourmet Market</strong><br>
+                    <strong>081 Food & Beverage — Eccellenze Napoletane</strong><br>
                     <small>Via Montenapoleone 8, 20121 Milano (MI)</small>
                   </div>
                 </div>

@@ -24,25 +24,44 @@ import { Notification } from "@/components/grocery/notification";
 
 const FREE_SHIPPING_THRESHOLD = 50;
 
-import { useCartStore } from "@/store/cart";
+import {
+  useCartStore,
+  getCartItemKey,
+  getSavedItemKey,
+  findCartItemByIdentifier,
+  saveCartItemForLater,
+  restoreSavedCartItem,
+  removeSavedCartItem,
+  selectCartSubtotal,
+  selectCartDiscount,
+  selectCartTotal,
+} from "@/store/cart";
 import { useTranslation } from "@/hooks/use-translation";
+import { useSession } from "next-auth/react";
+import { cartStorage } from "@/lib/cart-storage";
 
 export default function CartPage() {
   const router = useRouter();
   const { locale, setLocale, dict: t } = useTranslation();
+  const { data: session, status } = useSession();
   
   // Zustand Global Cart Store integration
   const cart = useCartStore((state) => state.items);
   const addItem = useCartStore((state) => state.addItem);
   const removeItem = useCartStore((state) => state.removeItem);
   const updateQuantity = useCartStore((state) => state.updateQuantity);
+  const discountCode = useCartStore((state) => state.discountCode);
+  const isSyncing = useCartStore((state) => state.isSyncing);
+  const subtotal = useCartStore(selectCartSubtotal);
+  const discountAmount = useCartStore(selectCartDiscount);
+  const finalTotal = useCartStore(selectCartTotal);
 
   const [saveForLater, setSaveForLater] = useState<CartItem[]>([]);
+  const [saveLaterError, setSaveLaterError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ id: string; product: Product } | null>(null);
 
   // Coupon state
   const [couponCode, setCouponCode] = useState("");
-  const [appliedDiscount, setAppliedDiscount] = useState<number>(0); // e.g. 0.1 for 10%
   const [couponError, setCouponError] = useState("");
   const [couponSuccess, setCouponSuccess] = useState("");
 
@@ -77,56 +96,65 @@ export default function CartPage() {
     localStorage.setItem("alimentari_save_later", JSON.stringify(newLater));
   };
 
-  const handleQuantityChange = (productId: string, qty: number) => {
-    const existing = useCartStore.getState().items.find((item) => item.product.id === productId);
-    const productObj = existing?.product || saveForLater.find((i) => i.product.id === productId)?.product;
+  const handleQuantityChange = (identifier: string, qty: number) => {
+    const existing = findCartItemByIdentifier(useCartStore.getState().items, identifier);
+    const productObj =
+      existing?.product || findCartItemByIdentifier(saveForLater, identifier)?.product;
 
     if (!existing && qty === 1 && productObj) {
       setToast({ id: String(Date.now()), product: productObj });
     }
 
     if (qty <= 0) {
-      removeItem(productId);
+      removeItem(identifier);
     } else if (existing) {
-      updateQuantity(productId, qty);
+      updateQuantity(identifier, qty);
     } else if (productObj) {
       addItem(productObj, qty);
     }
   };
 
-  const handleRemoveItem = (productId: string) => {
-    removeItem(productId);
+  const handleRemoveItem = (identifier: string) => {
+    removeItem(identifier);
   };
 
   // Save for later flows
-  const moveToSaveForLater = (productId: string) => {
-    const itemToMove = cart.find((item) => item.product.id === productId);
+  const moveToSaveForLater = (identifier: string) => {
+    setSaveLaterError(null);
+    const { itemToMove, updatedSavedItems } = saveCartItemForLater(
+      cart,
+      saveForLater,
+      identifier
+    );
     if (!itemToMove) return;
 
-    // Filter out of cart
-    removeItem(productId);
+    // Filter out of cart using exact variant/line identifier
+    removeItem(getCartItemKey(itemToMove));
 
-    // Add to save later
-    const updatedLater = [...saveForLater.filter((item) => item.product.id !== productId), itemToMove];
-    saveLaterState(updatedLater);
-
-    alert(locale === "it" ? "Prodotto salvato per dopo!" : "Item saved for later!");
+    // Persist in save later
+    saveLaterState(updatedSavedItems);
   };
 
-  const moveToActiveCart = (productId: string) => {
-    const itemToMove = saveForLater.find((item) => item.product.id === productId);
-    if (!itemToMove) return;
+  const moveToActiveCart = (identifier: string) => {
+    setSaveLaterError(null);
+    const result = restoreSavedCartItem(saveForLater, identifier, locale);
+    if (!result.canRestore || !result.itemToRestore) {
+      setSaveLaterError(
+        result.error ||
+          (locale === "it"
+            ? "Impossibile ripristinare la variante selezionata."
+            : "Unable to restore the selected variant.")
+      );
+      return;
+    }
 
-    // Filter out of save later
-    const updatedLater = saveForLater.filter((item) => item.product.id !== productId);
-    saveLaterState(updatedLater);
-
-    // Add to active cart
-    addItem(itemToMove.product, itemToMove.quantity);
+    saveLaterState(result.updatedSavedItems);
+    addItem(result.itemToRestore.product, result.restoreQuantity);
   };
 
-  const removeSaveLaterItem = (productId: string) => {
-    const updatedLater = saveForLater.filter((item) => item.product.id !== productId);
+  const removeSaveLaterItem = (identifier: string) => {
+    setSaveLaterError(null);
+    const updatedLater = removeSavedCartItem(saveForLater, identifier);
     saveLaterState(updatedLater);
   };
 
@@ -138,18 +166,45 @@ export default function CartPage() {
     setCouponSuccess("");
 
     const code = couponCode.trim().toUpperCase();
-    if (!code) return;
+    if (!code) {
+      setCouponError(
+        locale === "it"
+          ? "Inserisci un codice promozionale valido."
+          : "Please enter a valid promotional code."
+      );
+      return;
+    }
 
     const res = await useCartStore.getState().applyDiscountCode(code);
     if (res.success) {
-      setAppliedDiscount(useCartStore.getState().appliedDiscount || 0.1);
+      setCouponCode("");
       setCouponSuccess(
         locale === "it"
-          ? "Codice promozionale applicato al carrello!"
-          : "Promo code applied to cart!"
+          ? `Codice "${code}" applicato al carrello!`
+          : `Promo code "${code}" applied to cart!`
       );
     } else {
-      setCouponError(res.error || (locale === "it" ? "Codice promozionale non valido" : "Invalid promotional code"));
+      setCouponError(
+        res.error ||
+          (locale === "it"
+            ? "Codice promozionale non valido, scaduto o non applicabile."
+            : "Invalid, expired, or inapplicable promotional code.")
+      );
+    }
+  };
+
+  const handleRemoveCoupon = async () => {
+    setCouponError("");
+    setCouponSuccess("");
+    const res = await useCartStore.getState().removeDiscountCode();
+    if (res.success) {
+      setCouponSuccess(
+        locale === "it"
+          ? "Codice promozionale rimosso."
+          : "Promotional code removed."
+      );
+    } else if (res.error) {
+      setCouponError(res.error);
     }
   };
 
@@ -167,50 +222,47 @@ export default function CartPage() {
   };
 
   const handleCheckout = async () => {
+    if (status === "loading") return;
+
+    const isAuthenticated = status === "authenticated" && Boolean(session?.user);
+    if (!isAuthenticated) {
+      cartStorage.setPendingCheckoutIntent(true);
+      setIsRedirecting(false);
+      router.push("/accedi?redirect=checkout");
+      return;
+    }
+
     setIsRedirecting(true);
     const cartId = useCartStore.getState().cartId;
     const checkoutUrlState = useCartStore.getState().checkoutUrl;
 
-    console.log("[REACT_CHECKOUT_CLICK] Triggered on /carrello page.");
-    console.log("[REACT_CHECKOUT_CLICK] cartId:", cartId);
-    console.log("[REACT_CHECKOUT_CLICK] checkoutUrlState from Zustand:", checkoutUrlState);
-
     try {
       const { trackCheckoutStart } = await import("@/lib/analytics");
-      trackCheckoutStart(cart, subtotal - discountAmount);
+      trackCheckoutStart(cart, finalTotal);
 
       let targetUrl = checkoutUrlState;
 
       if (!targetUrl || !targetUrl.startsWith("https://")) {
-        console.log("[REACT_CHECKOUT_CLICK] Generating checkout URL via checkoutCart()...");
         const { checkoutCart } = await import("@/lib/shopify");
         targetUrl = await checkoutCart(cartId, cart, locale);
-        console.log("[REACT_CHECKOUT_CLICK] checkoutCart() returned URL:", targetUrl);
       }
 
       if (targetUrl && targetUrl.startsWith("https://")) {
-        console.log("[REACT_CHECKOUT_CLICK] EXECUTING BROWSER REDIRECT TO:", targetUrl);
+        cartStorage.clearPendingCheckoutIntent();
         window.location.assign(targetUrl);
       } else {
-        console.error("[REACT_CHECKOUT_CLICK] Invalid redirect URL generated:", targetUrl);
         alert(locale === "it"
           ? "Si è verificato un errore durante il reindirizzamento al checkout di Shopify."
           : "An error occurred during Shopify checkout redirection.");
         setIsRedirecting(false);
       }
-    } catch (error) {
-      console.error("[REACT_CHECKOUT_CLICK] Exception during checkout:", error);
+    } catch {
       setIsRedirecting(false);
     }
   };
 
-  const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const discountAmount = subtotal * appliedDiscount;
-  const deliveryFee = subtotal >= FREE_SHIPPING_THRESHOLD || subtotal === 0 ? 0 : 5.9;
-  const finalTotal = subtotal - discountAmount + deliveryFee;
-
   const remainingForFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-  const isFreeShipping = remainingForFreeShipping === 0;
+  const isFreeShipping = subtotal > 0 && remainingForFreeShipping === 0;
   const progressPercent = Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100);
 
   return (
@@ -323,11 +375,20 @@ export default function CartPage() {
               {/* Cart List */}
               <div className="border border-border/80 rounded-2xl bg-card overflow-hidden shadow-soft divide-y divide-border/60">
                 {cart.map((item) => {
-                  const itemFreq = recurringFrequencies[item.product.id] || "one-time";
+                  const itemKey = getCartItemKey(item);
+                  const itemFreq = recurringFrequencies[itemKey] || "one-time";
                   const isRecurring = itemFreq !== "one-time";
+                  const maxStock =
+                    typeof item.product.stock === "number" &&
+                    Number.isFinite(item.product.stock) &&
+                    item.product.stock > 0
+                      ? item.product.stock
+                      : null;
+                  const isAtMaxStock = maxStock !== null && item.quantity >= maxStock;
+
                   return (
                     <div
-                      key={item.product.id}
+                      key={itemKey}
                       className="p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-6 hover:bg-muted/5 transition-all group"
                     >
                       {/* Product details Column */}
@@ -358,7 +419,7 @@ export default function CartPage() {
                           </div>
 
                           <span className="text-xs text-muted-foreground block">
-                            {item.product.unit} • €{item.product.price.toFixed(2)}
+                            {item.product.unit ? `${item.product.unit} • ` : ""}€{item.product.price.toFixed(2)}
                           </span>
 
                           {/* Shopify Subscription App simulation hooks */}
@@ -366,7 +427,7 @@ export default function CartPage() {
                             <CalendarDays className="w-3.5 h-3.5 text-primary stroke-[2.5]" />
                             <select
                               value={itemFreq}
-                              onChange={(e) => handleSubFrequencyChange(item.product.id, e.target.value as "one-time" | "weekly" | "monthly")}
+                              onChange={(e) => handleSubFrequencyChange(itemKey, e.target.value as "one-time" | "weekly" | "monthly")}
                               className="bg-transparent text-[11px] font-bold text-foreground border border-border/80 rounded px-1.5 py-0.5 focus:ring-1 focus:ring-primary outline-none cursor-pointer"
                             >
                               <option value="one-time">{locale === "it" ? "Acquisto Singolo" : "One-Time Purchase"}</option>
@@ -382,15 +443,16 @@ export default function CartPage() {
                         {/* Selector */}
                         <div className="flex items-center gap-2 select-none">
                           <button
-                            onClick={() => handleQuantityChange(item.product.id, item.quantity - 1)}
+                            onClick={() => handleQuantityChange(itemKey, item.quantity - 1)}
                             className="w-8 h-8 rounded border border-border/80 bg-card hover:bg-muted/10 font-bold flex items-center justify-center active:scale-90 transition-all text-xs"
                           >
                             -
                           </button>
                           <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
                           <button
-                            onClick={() => handleQuantityChange(item.product.id, item.quantity + 1)}
-                            className="w-8 h-8 rounded border border-border/80 bg-card hover:bg-muted/10 font-bold flex items-center justify-center active:scale-90 transition-all text-xs"
+                            onClick={() => handleQuantityChange(itemKey, item.quantity + 1)}
+                            disabled={isAtMaxStock}
+                            className="w-8 h-8 rounded border border-border/80 bg-card hover:bg-muted/10 font-bold flex items-center justify-center active:scale-90 transition-all text-xs disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             +
                           </button>
@@ -411,7 +473,7 @@ export default function CartPage() {
                         {/* Save later or delete */}
                         <div className="flex gap-1 items-center select-none">
                           <button
-                            onClick={() => moveToSaveForLater(item.product.id)}
+                            onClick={() => moveToSaveForLater(itemKey)}
                             className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-muted/10 active:scale-90 text-muted-foreground hover:text-primary transition-all"
                             title={t.cart.saveForLater}
                           >
@@ -419,7 +481,7 @@ export default function CartPage() {
                           </button>
 
                           <button
-                            onClick={() => handleRemoveItem(item.product.id)}
+                            onClick={() => handleRemoveItem(itemKey)}
                             className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-error/5 active:scale-90 text-muted-foreground hover:text-error transition-all"
                           >
                             <Trash2 className="w-4.5 h-4.5 stroke-[2]" />
@@ -442,54 +504,77 @@ export default function CartPage() {
                     </span>
                   </h3>
 
-                  <div className="border border-border/80 rounded-2xl bg-card overflow-hidden shadow-soft divide-y divide-border/60">
-                    {saveForLater.map((item) => (
-                      <div
-                        key={item.product.id}
-                        className="p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                      >
-                        <div className="flex gap-3 items-center">
-                          <div className="w-12 h-12 relative flex-shrink-0 rounded-lg overflow-hidden border">
-                            <Image
-                              src={item.product.imageUrl}
-                              alt={item.product.name}
-                              fill
-                              sizes="48px"
-                              className="object-cover"
-                              onError={(e) => {
-                                e.currentTarget.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
-                                e.currentTarget.srcset = "";
-                              }}
-                            />
-                          </div>
-                          <div>
-                            <h4 className="font-serif font-bold text-sm text-foreground">
-                              {item.product.name}
-                            </h4>
-                            <span className="text-xs text-muted-foreground">
-                              {item.product.unit} • €{item.product.price.toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
+                  {saveLaterError && (
+                    <div
+                      role="alert"
+                      className="p-3 rounded-xl bg-error/10 border border-error/25 text-xs font-semibold text-error"
+                    >
+                      {saveLaterError}
+                    </div>
+                  )}
 
-                        <div className="flex items-center gap-4 self-end sm:self-center select-none">
-                          <button
-                            onClick={() => removeSaveLaterItem(item.product.id)}
-                            className="text-xs font-bold text-error hover:underline uppercase tracking-wide"
-                          >
-                            Rimuovi
-                          </button>
-                          <Button
-                            onClick={() => moveToActiveCart(item.product.id)}
-                            variant="outline"
-                            size="sm"
-                            className="font-bold text-xs h-8 border-primary text-primary hover:bg-primary/5"
-                          >
-                            {locale === "it" ? "Ripristina" : "Restore"}
-                          </Button>
+                  <div className="border border-border/80 rounded-2xl bg-card overflow-hidden shadow-soft divide-y divide-border/60">
+                    {saveForLater.map((item) => {
+                      const savedKey = getSavedItemKey(item);
+                      const isSavedVariantUnavailable =
+                        item.product.available === false ||
+                        (typeof item.product.stock === "number" && item.product.stock <= 0);
+
+                      return (
+                        <div
+                          key={savedKey}
+                          className="p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        >
+                          <div className="flex gap-3 items-center">
+                            <div className="w-12 h-12 relative flex-shrink-0 rounded-lg overflow-hidden border">
+                              <Image
+                                src={item.product.imageUrl}
+                                alt={item.product.name}
+                                fill
+                                sizes="48px"
+                                className="object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.src = "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=400&auto=format&fit=crop";
+                                  e.currentTarget.srcset = "";
+                                }}
+                              />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-serif font-bold text-sm text-foreground">
+                                  {item.product.name}
+                                </h4>
+                                {isSavedVariantUnavailable && (
+                                  <Badge className="bg-error/10 text-error border border-error/20 text-[10px] font-bold py-0 h-4">
+                                    {locale === "it" ? "Esaurito" : "Sold Out"}
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {item.product.unit ? `${item.product.unit} • ` : ""}€{item.product.price.toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-4 self-end sm:self-center select-none">
+                            <button
+                              onClick={() => removeSaveLaterItem(savedKey)}
+                              className="text-xs font-bold text-error hover:underline uppercase tracking-wide"
+                            >
+                              {locale === "it" ? "Rimuovi" : "Remove"}
+                            </button>
+                            <Button
+                              onClick={() => moveToActiveCart(savedKey)}
+                              variant="outline"
+                              size="sm"
+                              className="font-bold text-xs h-8 border-primary text-primary hover:bg-primary/5"
+                            >
+                              {locale === "it" ? "Ripristina" : "Restore"}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -509,11 +594,23 @@ export default function CartPage() {
                     <span className="text-foreground">€{subtotal.toFixed(2)}</span>
                   </div>
 
-                  {appliedDiscount > 0 && (
-                    <div className="flex justify-between text-success font-bold">
-                      <span className="flex items-center gap-1">
+                  {discountCode && discountAmount > 0 && (
+                    <div className="flex justify-between items-center text-success font-bold">
+                      <span className="flex items-center gap-1.5">
                         <Percent className="w-3.5 h-3.5" />
-                        Sconto (10%)
+                        <span>
+                          {locale === "it"
+                            ? `Sconto (${discountCode})`
+                            : `Discount (${discountCode})`}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleRemoveCoupon}
+                          disabled={isSyncing}
+                          className="ml-1 text-[11px] text-muted-foreground hover:text-error underline font-semibold disabled:opacity-50"
+                        >
+                          {locale === "it" ? "Rimuovi" : "Remove"}
+                        </button>
                       </span>
                       <span>- €{discountAmount.toFixed(2)}</span>
                     </div>
@@ -522,10 +619,12 @@ export default function CartPage() {
                   <div className="flex justify-between">
                     <span>{t.checkout.shipping}</span>
                     <span className="text-foreground">
-                      {deliveryFee === 0 ? (
+                      {isFreeShipping ? (
                         <span className="text-success font-bold">{t.cart.free}</span>
                       ) : (
-                        `€${deliveryFee.toFixed(2)}`
+                        <span className="text-xs text-muted-foreground font-medium">
+                          {locale === "it" ? "Calcolata al checkout" : "Calculated at checkout"}
+                        </span>
                       )}
                     </span>
                   </div>
@@ -586,7 +685,7 @@ export default function CartPage() {
                 {/* Trust indications */}
                 <div className="pt-4 border-t border-border/60 flex items-center justify-center gap-2 text-xs text-muted-foreground font-semibold">
                   <ShieldCheck className="w-4.5 h-4.5 text-success" />
-                  <span>Checkout Crittografato SSL • Alimentari</span>
+                  <span>Checkout Crittografato SSL • 081 Food & Beverage</span>
                 </div>
               </div>
             </aside>

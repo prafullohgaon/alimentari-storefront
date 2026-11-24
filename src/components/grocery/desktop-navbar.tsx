@@ -13,6 +13,7 @@ import { useTranslation } from "@/hooks/use-translation";
 import { NavCategory, NavColumn, NavLinkItem } from "@/lib/navigation";
 import { getUnifiedStorefrontNavigation } from "@/lib/cms";
 import Link from "next/link";
+import Image from "next/image";
 import { SidebarNode } from "@/types/sidebar";
 import { HomepageContactSettings } from "@/lib/cms";
 
@@ -233,19 +234,18 @@ function DesktopNavbarComponent({
             {/* Brand Logo */}
             <div
               onClick={() => router.push("/")}
-              className="flex items-center gap-3 cursor-pointer group"
+              className="flex items-center shrink-0 cursor-pointer group"
+              aria-label={t("footer.logoAlt")}
             >
-              <div className="w-10 h-10 rounded-xl bg-emerald-700 flex items-center justify-center text-white font-extrabold text-xl shadow-md group-hover:bg-emerald-800 transition-colors">
-                A
-              </div>
-              <div className="flex flex-col">
-                <span className="font-serif text-2xl font-black tracking-tight text-slate-900 leading-none">
-                  Alimentari
-                </span>
-                <span className="text-[10px] font-bold tracking-widest text-emerald-700 uppercase leading-tight">
-                  Gourmet Market
-                </span>
-              </div>
+              <Image
+                src="/assets/brand/081-logo-horizontal.png"
+                alt={t("footer.logoAlt")}
+                width={194}
+                height={46}
+                priority
+                unoptimized
+                className="h-[44px] w-[186px] lg:h-[46px] lg:w-[194px] object-contain select-none"
+              />
             </div>
 
             {/* Central Search Bar */}

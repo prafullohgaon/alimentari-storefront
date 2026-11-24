@@ -18,7 +18,7 @@ export function CookieClient() {
   }, [initLocale]);
 
   useEffect(() => {
-    document.title = locale === "en" ? "Cookie Policy | Alimentari" : "Cookie Policy | Alimentari";
+    document.title = locale === "en" ? "Cookie Policy | 081 Food & Beverage" : "Cookie Policy | 081 Food & Beverage";
   }, [locale]);
 
   return (

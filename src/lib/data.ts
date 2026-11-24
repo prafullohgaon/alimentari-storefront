@@ -4,8 +4,8 @@ export interface ProductVariant {
   sku: string;
   price: number;
   originalPrice?: number;
-  stock: number;
-  available: boolean;
+  stock: number | null;
+  available?: boolean;
   selectedOptions: { name: string; value: string }[];
   image?: { url: string; altText?: string };
 }
@@ -30,7 +30,7 @@ export interface Product {
   originalPrice?: number;
   brand?: string;
   dietary?: "Gluten Free" | "Vegan" | "Senza Lattosio" | "Bio";
-  stock?: number;
+  stock?: number | null;
   available?: boolean;
   sku?: string;
   origin?: string;

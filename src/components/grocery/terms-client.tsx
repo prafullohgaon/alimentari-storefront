@@ -18,7 +18,7 @@ export function TermsClient() {
   }, [initLocale]);
 
   useEffect(() => {
-    document.title = locale === "en" ? "Terms & Conditions | Alimentari" : "Termini e Condizioni | Alimentari";
+    document.title = locale === "en" ? "Terms & Conditions | 081 Food & Beverage" : "Termini e Condizioni | 081 Food & Beverage";
   }, [locale]);
 
   return (

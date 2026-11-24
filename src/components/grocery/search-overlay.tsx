@@ -485,7 +485,21 @@ export function SearchOverlay({
                           {items.map((p) => {
                             const flatIndex = displayedProducts.findIndex((item) => item.id === p.id);
                             const isKeyboardSelected = selectedIndex === flatIndex;
-                            const isLowStock = p.stock && p.stock <= 15;
+                            const isAvailable =
+                              p.available === false
+                                ? false
+                                : typeof p.stock === "number" && p.stock <= 0
+                                ? false
+                                : p.available === true
+                                ? true
+                                : typeof p.stock === "number"
+                                ? p.stock > 0
+                                : true;
+                            const isLowStock =
+                              isAvailable &&
+                              typeof p.stock === "number" &&
+                              p.stock > 0 &&
+                              p.stock < 15;
 
                             return (
                               <div
@@ -549,22 +563,35 @@ export function SearchOverlay({
                                     </h5>
                                     <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground font-semibold">
                                       <span>{p.unit}</span>
-                                      {isLowStock && (
+                                      {!isAvailable ? (
+                                        <span className="text-rose-600 font-bold text-[9px] uppercase tracking-wider">
+                                          {t("pdp.soldOut")}
+                                        </span>
+                                      ) : isLowStock ? (
                                         <span className="text-[#C9623B] font-bold text-[9px] uppercase tracking-wider">
                                           {t("searchOverlay.lowStock", { count: p.stock ?? 0 })}
                                         </span>
-                                      )}
+                                      ) : null}
                                     </div>
                                   </div>
 
                                   <div className="flex items-center justify-between gap-4 mt-2.5 select-none">
                                     <span className="font-bold text-sm text-foreground">€{p.price.toFixed(2)}</span>
                                     <button
-                                      onClick={() => onAddToCart(p.id)}
-                                      className="h-8 px-3.5 bg-[#1C3B2B] hover:bg-[#1C3B2B]/90 text-white font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                                      onClick={() => {
+                                        if (!isAvailable) return;
+                                        onAddToCart(p.id);
+                                      }}
+                                      disabled={!isAvailable}
+                                      className={cn(
+                                        "h-8 px-3.5 font-bold text-xs rounded-lg flex items-center justify-center gap-1.5 transition-all",
+                                        isAvailable
+                                          ? "bg-[#1C3B2B] hover:bg-[#1C3B2B]/90 text-white shadow-sm cursor-pointer"
+                                          : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                      )}
                                     >
                                       <ShoppingBag className="w-3.5 h-3.5 stroke-[2.5]" />
-                                      {t("searchOverlay.addToCart")}
+                                      {!isAvailable ? t("pdp.soldOut") : t("searchOverlay.addToCart")}
                                     </button>
                                   </div>
                                 </div>

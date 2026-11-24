@@ -18,7 +18,7 @@ export function PrivacyClient() {
   }, [initLocale]);
 
   useEffect(() => {
-    document.title = locale === "en" ? "Privacy Policy | Alimentari" : "Privacy Policy | Alimentari";
+    document.title = locale === "en" ? "Privacy Policy | 081 Food & Beverage" : "Privacy Policy | 081 Food & Beverage";
   }, [locale]);
 
   return (

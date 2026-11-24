@@ -28,12 +28,14 @@ const BASE_URL = "https://alimentari.it";
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
-    default: "Alimentari — Spesa Italiana Online | Premium Italian Grocery Delivery",
-    template: "%s | Alimentari",
+    default: "081 Food & Beverage — Eccellenze Napoletane | Spesa Italiana Online",
+    template: "%s | 081 Food & Beverage",
   },
   description:
-    "Acquista prodotti alimentari italiani premium online. Formaggi DOP, salumi IGP, pasta artigianale, vini e molto altro. Consegna refrigerata in tutta Europa da €49.",
+    "081 Food & Beverage — Eccellenze Napoletane. Acquista prodotti alimentari napoletani e italiani premium online: formaggi DOP, salumi IGP, pasta artigianale, vini e specialità gastronomiche.",
   keywords: [
+    "081 Food & Beverage",
+    "eccellenze napoletane",
     "spesa italiana online",
     "prodotti italiani",
     "gastronomia italiana",
@@ -45,9 +47,9 @@ export const metadata: Metadata = {
     "Italian grocery delivery",
     "Italian food online",
   ],
-  authors: [{ name: "Alimentari", url: BASE_URL }],
-  creator: "Alimentari",
-  publisher: "Alimentari",
+  authors: [{ name: "081 Food & Beverage", url: BASE_URL }],
+  creator: "081 Food & Beverage",
+  publisher: "081 Food & Beverage",
   alternates: {
     canonical: BASE_URL,
     languages: {
@@ -61,27 +63,25 @@ export const metadata: Metadata = {
     locale: "it_IT",
     alternateLocale: "en_US",
     url: BASE_URL,
-    siteName: "Alimentari",
-    title: "Alimentari — Spesa Italiana Online | Premium Italian Grocery Delivery",
+    siteName: "081 Food & Beverage",
+    title: "081 Food & Beverage — Eccellenze Napoletane | Spesa Italiana Online",
     description:
-      "Acquista prodotti alimentari italiani premium online. Formaggi DOP, salumi IGP, pasta artigianale, vini e molto altro. Consegna refrigerata in tutta Europa da €49.",
+      "081 Food & Beverage — Eccellenze Napoletane. Acquista prodotti alimentari napoletani e italiani premium online. Formaggi DOP, salumi IGP, pasta artigianale, vini e molto altro.",
     images: [
       {
         url: `${BASE_URL}/og-image.jpg`,
         width: 1200,
         height: 630,
-        alt: "Alimentari — Premium Italian Grocery Delivery",
+        alt: "081 Food & Beverage — Eccellenze Napoletane",
         type: "image/jpeg",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    site: "@alimentari",
-    creator: "@alimentari",
-    title: "Alimentari — Spesa Italiana Online | Premium Italian Grocery Delivery",
+    title: "081 Food & Beverage — Eccellenze Napoletane | Spesa Italiana Online",
     description:
-      "Acquista prodotti alimentari italiani premium online. Consegna refrigerata in tutta Europa.",
+      "081 Food & Beverage — Eccellenze Napoletane. Acquista prodotti alimentari napoletani e italiani premium online.",
     images: [`${BASE_URL}/og-image.jpg`],
   },
   robots: {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { ShoppingBag, Loader2, ArrowRight } from "lucide-react";
 import { useCartStore } from "@/store/cart";
 import { checkoutCart } from "@/lib/shopify";
@@ -11,12 +12,15 @@ import { useLocaleStore } from "@/store/locale";
 
 export default function CheckoutRedirectPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const { t, locale } = useTranslation();
   const initLocale = useLocaleStore((state) => state.initLocale);
 
   const cartId = useCartStore((state) => state.cartId);
   const checkoutUrlState = useCartStore((state) => state.checkoutUrl);
   const items = useCartStore((state) => state.items);
+  const isSyncing = useCartStore((state) => state.isSyncing);
+  const mode = useCartStore((state) => state.mode);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -29,33 +33,26 @@ export default function CheckoutRedirectPage() {
   }, [locale, t]);
 
   useEffect(() => {
+    if (status === "loading" || isSyncing) {
+      return;
+    }
+
+    if (status === "unauthenticated" || !session?.user) {
+      cartStorage.setPendingCheckoutIntent(true);
+      router.replace("/accedi?redirect=checkout");
+      return;
+    }
+
+    // Wait for CartAuthSync (mergeGuestCart) to transition the cart store into customer mode
+    if (session.accessToken && session.user.id && mode === "guest") {
+      return;
+    }
+
     async function executeCheckoutRedirect() {
-      const { useAuthStore } = await import("@/store/auth");
-
-      let token = useAuthStore.getState().token;
-      if (!token && typeof window !== "undefined") {
-        try {
-          const rawAuth = localStorage.getItem("alimentari_customer_token");
-          if (rawAuth) {
-            const parsed = JSON.parse(rawAuth);
-            token = parsed?.state?.token || null;
-            if (token) {
-              useAuthStore.getState().login(token);
-            }
-          }
-        } catch (e) {
-          console.error("Auth rehydration error:", e);
-        }
-      }
-
-      if (!token) {
-        cartStorage.setPendingCheckoutIntent(true);
-        router.push("/accedi?redirect=checkout");
-        return;
-      }
-
-      let currentItems = items;
-      let currentCartId = cartId;
+      const storeState = useCartStore.getState();
+      let currentItems = storeState.items.length > 0 ? storeState.items : items;
+      let currentCartId = storeState.cartId || cartId;
+      const latestCheckoutUrl = storeState.checkoutUrl || checkoutUrlState;
 
       if ((currentItems.length === 0 || !currentCartId) && typeof window !== "undefined") {
         try {
@@ -71,21 +68,22 @@ export default function CheckoutRedirectPage() {
       }
 
       if (currentItems.length === 0 && !currentCartId) {
-        router.push("/carrello");
+        cartStorage.clearPendingCheckoutIntent();
+        router.replace("/carrello");
         return;
       }
 
       try {
-        if (checkoutUrlState) {
+        if (latestCheckoutUrl && latestCheckoutUrl.startsWith("https://")) {
           cartStorage.clearPendingCheckoutIntent();
-          window.location.href = checkoutUrlState;
+          window.location.assign(latestCheckoutUrl);
           return;
         }
 
         const url = await checkoutCart(currentCartId, currentItems, locale);
         if (url && url.startsWith("https://")) {
           cartStorage.clearPendingCheckoutIntent();
-          window.location.href = url;
+          window.location.assign(url);
         } else {
           setError(t("checkoutPage.errorUnableToGenerateUrl"));
         }
@@ -96,7 +94,7 @@ export default function CheckoutRedirectPage() {
     }
 
     executeCheckoutRedirect();
-  }, [cartId, checkoutUrlState, items, router, t, locale]);
+  }, [status, session, isSyncing, mode, cartId, checkoutUrlState, items, router, t, locale]);
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center p-6 text-[#1C3B2B]">

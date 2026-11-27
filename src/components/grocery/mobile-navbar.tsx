@@ -117,7 +117,7 @@ export function MobileNavbar({
           aria-label={t("mobileNavbar.logoAlt")}
         >
           <Image
-            src="/assets/brand/081-logo-horizontal.png"
+            src="/assets/brand/081-logo-horizontal.svg"
             alt={t("mobileNavbar.logoAlt")}
             width={169}
             height={40}
@@ -174,7 +174,7 @@ export function MobileNavbar({
                   aria-label={t("mobileNavbar.logoAlt")}
                 >
                   <Image
-                    src="/assets/brand/081-logo-horizontal.png"
+                    src="/assets/brand/081-logo-horizontal.svg"
                     alt={t("mobileNavbar.logoAlt")}
                     width={144}
                     height={34}

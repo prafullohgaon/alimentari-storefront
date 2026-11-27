@@ -122,7 +122,7 @@ function ResetPasswordForm() {
           className="flex items-center shrink-0 cursor-pointer"
         >
           <Image
-            src="/assets/brand/081-logo-horizontal.png"
+            src="/assets/brand/081-logo-horizontal.svg"
             alt="081 Food & Beverage — Eccellenze Napoletane"
             width={160}
             height={38}
